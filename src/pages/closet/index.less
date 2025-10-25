@@ -1,0 +1,141 @@
+.closet-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: #f5f5f5;
+}
+
+.top-nav {
+  display: flex;
+  justify-content: space-around;
+  background-color: #fff;
+  padding: 15px 0; /* 增加顶部导航栏的高度 */
+  border-bottom: 1px solid #ddd;
+  position: sticky; /* 固定顶部导航栏 */
+  top: 0;
+  z-index: 10;
+}
+
+.top-nav text {
+  font-size: 18px; /* 增大字体大小 */
+  color: #666;
+  cursor: pointer;
+}
+
+.top-nav text.active {
+  color: #000;
+  font-weight: bold;
+}
+
+.clothes-nav {
+  display: flex;
+  overflow-x: auto;
+  white-space: nowrap;
+  background-color: #f5f5f5;
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+.clothes-nav text {
+  display: inline-block;
+  margin: 0 10px;
+  padding: 5px 15px;
+  border-radius: 20px;
+  background-color: #eaeaea;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.clothes-nav text.active {
+  background-color: #000;
+  color: #fff;
+  font-weight: bold;
+}
+
+.tab-content {
+  flex: 1;
+  position: relative;
+}
+
+.outfits-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px; /* 增加网格项之间的间距 */
+  padding: 10px;
+}
+
+.outfit-item {
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px; /* 增加内部填充 */
+  aspect-ratio: 2 / 2.5; /* 修改宽高比例为2:2.5 */
+}
+
+.outfit-image {
+  height: 120px; /* 增加图片区域的高度 */
+  width: 100%;
+  background-color: #f0f0f0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 2; /* 图片区域占2份 */
+}
+
+.outfit-actions {
+  display: flex;
+  justify-content: space-around;
+  width: 100%;
+  padding: 5px 0;
+  flex: 1; /* 操作区域占1份 */
+}
+
+.add-icon {
+  position: fixed; /* 固定右下角加号图标 */
+  bottom: 20px;
+  right: 20px;
+  width: 60px; /* 增大“➕”号图标的宽度 */
+  height: 60px; /* 增大“➕”号图标的高度 */
+  background-color: #007aff;
+  color: #fff;
+  font-size: 28px; /* 增大字体大小 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+
+.clothes-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* 每行展示四个元素 */
+  gap: 10px; /* 设置元素之间的间距 */
+  padding: 10px;
+}
+
+.clothes-item {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 280px; /* 调整元素高度 */
+}
+
+.clothes-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
