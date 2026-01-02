@@ -32,7 +32,8 @@ router.post('/add', upload.single('image'), async (req, res) => {
     console.log('[clothes.add] body=', req.body);
     
     // 直接接收 remarks，不再兼容 notes
-    let { account, category_id, price, scene_ids, season_ids, remarks, image_url } = req.body;
+    // 增加接收 name 字段
+    let { account, name, category_id, category_ids, price, scene_ids, season_ids, remarks, image_url } = req.body;
 
     let fileBuffer = null;
     try {
@@ -68,9 +69,10 @@ router.post('/add', upload.single('image'), async (req, res) => {
             const userId = userRows[0].id;
 
             // 3. 插入主表 clothes (注意字段名变化)
+            // 修正：name 字段为 NOT NULL，优先使用前端传入的 name，否则使用默认值
             const [result] = await connection.query(
-                `INSERT INTO clothes (user_id, image_url, price, remarks) VALUES (?, ?, ?, ?)`,
-                [userId, publicUrl, price || 0, remarks || '']
+                `INSERT INTO clothes (user_id, name, image_url, price, remarks) VALUES (?, ?, ?, ?, ?)`,
+                [userId, name || '未命名单品', publicUrl, price || 0, remarks || '']
             );
             const newClothesId = result.insertId;
 
@@ -78,9 +80,18 @@ router.post('/add', upload.single('image'), async (req, res) => {
             const tagRelations = [];
             
             // 4.1 分类标签
-            if (category_id) {
-                tagRelations.push([newClothesId, category_id, 'ITEM']);
+            // 兼容 category_id 和 category_ids
+            const catIds = [];
+            if (category_ids) {
+                 if (Array.isArray(category_ids)) catIds.push(...category_ids);
+                 else catIds.push(...String(category_ids).split(','));
             }
+            if (category_id) catIds.push(category_id);
+            
+            // 去重并添加
+            [...new Set(catIds)].forEach(cid => {
+                if (cid && String(cid).trim()) tagRelations.push([newClothesId, cid, 'ITEM']);
+            });
 
             // 4.2 场景标签
             if (scene_ids && scene_ids !== '' && scene_ids !== '-') {
@@ -199,7 +210,7 @@ router.get('/list', async (req, res) => {
                     price: row.price,
                     remarks: row.remarks, // 返回 remarks
                     created_at: row.created_at,
-                    category_name: '',
+                    category_names: [], // 改为数组
                     scene_names: [],
                     season_names: []
                 });
@@ -207,7 +218,7 @@ router.get('/list', async (req, res) => {
             
             const item = clothesMap.get(row.id);
             if (row.tag_type === 'CATEGORY') {
-                item.category_name = row.tag_name;
+                item.category_names.push(row.tag_name);
             } else if (row.tag_type === 'SCENE') {
                 item.scene_names.push(row.tag_name);
             } else if (row.tag_type === 'SEASON') {
@@ -246,16 +257,16 @@ router.get('/detail/:id', async (req, res) => {
 
         const result = {
             ...item,
-            category_id: null,
-            category_name: '',
+            category_ids: [],
+            category_names: [],
             scenes: [],
             seasons: []
         };
 
         tags.forEach(t => {
             if (t.tag_type === 'CATEGORY') {
-                result.category_id = t.id;
-                result.category_name = t.name;
+                result.category_ids.push(t.id);
+                result.category_names.push(t.name);
             } else if (t.tag_type === 'SCENE') {
                 result.scenes.push(t);
             } else if (t.tag_type === 'SEASON') {
@@ -275,18 +286,29 @@ router.get('/detail/:id', async (req, res) => {
  */
 router.put('/update/:id', async (req, res) => {
     const { id } = req.params;
-    // 接收 remarks
-    const { category_id, price, scene_ids, season_ids, remarks } = req.body;
+    // 接收 remarks, 增加 name
+    const { name, category_id, price, scene_ids, season_ids, remarks } = req.body;
     const connection = await db.getConnection();
 
     try {
         await connection.beginTransaction();
 
-        // 1. 更新基础表
-        await connection.query(
-            `UPDATE clothes SET price=?, remarks=? WHERE id=?`,
-            [price, remarks, id]
-        );
+        // 1. 更新基础表 (支持更新名称)
+        // 构建动态更新语句，避免覆盖未传递的字段
+        const updates = [];
+        const params = [];
+        
+        if (name !== undefined) { updates.push('name=?'); params.push(name); }
+        if (price !== undefined) { updates.push('price=?'); params.push(price); }
+        if (remarks !== undefined) { updates.push('remarks=?'); params.push(remarks); }
+        
+        if (updates.length > 0) {
+            params.push(id);
+            await connection.query(
+                `UPDATE clothes SET ${updates.join(', ')} WHERE id=?`,
+                params
+            );
+        }
 
         // 2. 更新标签逻辑：先删除该衣物的所有标签关联，再重新插入
         await connection.query(`DELETE FROM entity_tag_relation WHERE entity_id = ? AND entity_type = 'ITEM'`, [id]);
@@ -407,14 +429,24 @@ router.delete('/delete/:id', async (req, res) => {
  * 适配新表结构：插入 entity_tag_relation
  */
 router.post('/batch-add-tags', async (req, res) => {
-    const { ids, category_id, scene_ids, season_ids } = req.body;
+    const { ids, category_id, category_ids, scene_ids, season_ids } = req.body;
 
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ msg: '请选择至少一件衣物' });
     }
 
+    // 统一处理分类ID，兼容单选(category_id)和多选(category_ids)
+    let targetCategoryIds = [];
+    if (category_ids) {
+        targetCategoryIds = Array.isArray(category_ids) ? category_ids : String(category_ids).split(',');
+    } else if (category_id) {
+        targetCategoryIds = [category_id];
+    }
+    // 过滤无效值
+    targetCategoryIds = targetCategoryIds.filter(id => id && String(id).trim() !== '');
+
     // 校验：至少选择一种标签（分类、场景或季节）
-    const hasCategory = category_id && String(category_id).trim() !== '';
+    const hasCategory = targetCategoryIds.length > 0;
     const hasScene = scene_ids && (Array.isArray(scene_ids) ? scene_ids.length > 0 : String(scene_ids).trim() !== '');
     const hasSeason = season_ids && (Array.isArray(season_ids) ? season_ids.length > 0 : String(season_ids).trim() !== '');
 
@@ -426,7 +458,7 @@ router.post('/batch-add-tags', async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        const targetCategoryIds = hasCategory ? [category_id] : [];
+        // const targetCategoryIds 已经在上面处理好了
         const targetSceneIds = scene_ids ? (Array.isArray(scene_ids) ? scene_ids : String(scene_ids).split(',')) : [];
         const targetSeasonIds = season_ids ? (Array.isArray(season_ids) ? season_ids : String(season_ids).split(',')) : [];
         

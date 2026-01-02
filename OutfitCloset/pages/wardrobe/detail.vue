@@ -8,22 +8,41 @@
 
                 <view class="info-card">
                     <view class="header">
-                        <text class="title">{{ details.description || '未命名单品' }}</text>
-                        <van-tag type="primary" size="medium">{{ details.category_name }}</van-tag>
+                        <view class="title-row">
+                            <text class="title">{{ details.name || '未命名单品' }}</text>
+                        </view>
+                        <view class="tags-row">
+                            <van-tag v-for="(cat, idx) in details.category_names" :key="idx" type="primary" size="medium" class="mr-1">{{ cat }}</van-tag>
+                            <van-tag v-if="!details.category_names || details.category_names.length === 0" type="primary" size="medium">{{ details.category_name || '未分类' }}</van-tag>
+                        </view>
                     </view>
 
                     <view class="detail-list">
                         <view class="item">
                             <text class="label">适用季节</text>
-                            <text class="value">{{ details.season || '四季' }}</text>
+                            <view class="value-box">
+                                <text v-if="details.seasons && details.seasons.length > 0">
+                                    {{ details.seasons.map((s:any) => s.name).join(' / ') }}
+                                </text>
+                                <text v-else>四季</text>
+                            </view>
                         </view>
                         <view class="item">
-                            <text class="label">材质/面料</text>
-                            <text class="value">{{ details.material || '常规' }}</text>
+                            <text class="label">适用场景</text>
+                            <view class="value-box">
+                                <text v-if="details.scenes && details.scenes.length > 0">
+                                    {{ details.scenes.map((s:any) => s.name).join(' / ') }}
+                                </text>
+                                <text v-else>-</text>
+                            </view>
+                        </view>
+                        <view class="item">
+                            <text class="label">备注信息</text>
+                            <text class="value">{{ details.remarks || '-' }}</text>
                         </view>
                         <view class="item">
                             <text class="label">入库时间</text>
-                            <text class="value">{{ formatDate(details.created_at) }}</text>
+                            <text class="value">{{ formatDate(details.created_at || details.record_time) }}</text>
                         </view>
                     </view>
                 </view>
@@ -159,14 +178,25 @@ const formatDate = (dateStr: string) => {
         box-shadow: 0 4rpx 20rpx rgba(0,0,0,0.05);
 
         .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
             margin-bottom: 40rpx;
-            .title {
-                font-size: 36rpx;
-                font-weight: bold;
-                color: #323233;
+            
+            .title-row {
+                margin-bottom: 16rpx;
+                .title {
+                    font-size: 36rpx;
+                    font-weight: bold;
+                    color: #323233;
+                }
+            }
+            
+            .tags-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10rpx;
+                
+                .mr-1 {
+                    margin-right: 0; // gap handles spacing
+                }
             }
         }
 
@@ -176,8 +206,19 @@ const formatDate = (dateStr: string) => {
                 justify-content: space-between;
                 margin-bottom: 25rpx;
                 font-size: 28rpx;
-                .label { color: #969799; }
-                .value { color: #323233; font-weight: 500; }
+                .label { color: #969799; flex-shrink: 0; width: 140rpx; }
+                .value-box { 
+                    color: #323233; 
+                    font-weight: 500; 
+                    text-align: right;
+                    flex: 1;
+                }
+                .value { 
+                    color: #323233; 
+                    font-weight: 500; 
+                    text-align: right;
+                    flex: 1;
+                }
             }
         }
     }

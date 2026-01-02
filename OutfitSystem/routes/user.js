@@ -35,9 +35,9 @@ router.post('/register', async (req, res) => {
         // 3. 密码加密
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // 4. 存入 users 表
+        // 4. 存入 users 表 (移除 is_profile_completed)
         const [result] = await connection.query(
-            'INSERT INTO users (account, password, is_profile_completed) VALUES (?, ?, 0)', 
+            'INSERT INTO users (account, password) VALUES (?, ?)', 
             [account, hashedPassword]
         );
         const newUserId = result.insertId;
@@ -63,9 +63,10 @@ router.post('/login', async (req, res) => {
     const { account, password } = req.body;
 
     try {
-        // 1. 根据账号找人 (联表查询获取昵称)
+        // 1. 根据账号找人 (联表查询获取昵称和画像信息)
+        // 增加查询 style_preference 以判断资料是否完善
         const [rows] = await db.query(`
-            SELECT u.*, p.nickname, p.avatar_url 
+            SELECT u.*, p.nickname, p.avatar_url, p.style_preference
             FROM users u 
             LEFT JOIN user_profiles p ON u.id = p.user_id 
             WHERE u.account = ?
@@ -90,6 +91,9 @@ router.post('/login', async (req, res) => {
             { expiresIn: '24h' }
         );
 
+        // 动态判断是否完成资料：如果 style_preference 有值，则认为已完成
+        const isProfileCompleted = user.style_preference ? 1 : 0;
+
         res.json({
             code: 200,
             msg: '登录成功',
@@ -99,7 +103,7 @@ router.post('/login', async (req, res) => {
                 account: user.account,
                 nickname: user.nickname || `用户${user.account}`,
                 avatar_url: user.avatar_url,
-                is_profile_completed: user.is_profile_completed
+                is_profile_completed: isProfileCompleted
             }
         });
     } catch (err) {
@@ -110,7 +114,7 @@ router.post('/login', async (req, res) => {
 
 /**
  * [完善个人资料接口]
- * 逻辑：接收身材偏好数据 -> 更新 user_profiles -> 更新 users 状态
+ * 逻辑：接收身材偏好数据 -> 更新 user_profiles
  */
 router.put('/profile', async (req, res) => {
     // 1. 获取前端传来的数据
@@ -160,9 +164,6 @@ router.put('/profile', async (req, res) => {
             style_preference || null, 
             userId
         ]);
-
-        // 4. 更新 users 表状态
-        await connection.query('UPDATE users SET is_profile_completed = 1 WHERE id = ?', [userId]);
 
         await connection.commit();
         res.json({

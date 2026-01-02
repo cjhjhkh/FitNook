@@ -57,15 +57,16 @@
                             <!-- 选择模式下的半透明蒙板，点击切换选中 -->
                             <view v-if="isSelectMode" class="select-mask" @tap.stop="() => toggleSelectByTap(item.id)">
                                 <!-- 右上角显示圆形选中图标 -->
-                                <view class="select-icon" :class="{ checked: selectedIds.includes(item.id) }" @tap.stop="() => toggleSelectByTap(item.id)">
-                                    <van-icon v-if="selectedIds.includes(item.id)" name="success" color="#fff" size="18px" />
+                                <view class="select-icon" :class="{ checked: selectedIds.includes(item.id) }"
+                                    @tap.stop="() => toggleSelectByTap(item.id)">
+                                    <van-icon v-if="selectedIds.includes(item.id)" name="success" color="#fff"
+                                        size="18px" />
                                 </view>
                             </view>
 
                             <view v-if="isSelectMode" class="check-overlay">
                                 <van-checkbox :name="item.id" icon-size="16px" shape="round"
-                                    :checked="selectedIds.includes(item.id)"
-                                    @change="bindSelectHandler(item.id)" />
+                                    :checked="selectedIds.includes(item.id)" @change="bindSelectHandler(item.id)" />
                             </view>
                         </view>
                         <view class="tag-row">
@@ -82,14 +83,15 @@
 
                             <!-- 列表布局也加入选择蒙板 -->
                             <view v-if="isSelectMode" class="select-mask" @tap.stop="() => toggleSelectByTap(item.id)">
-                                <view class="select-icon" :class="{ checked: selectedIds.includes(item.id) }" @tap.stop="() => toggleSelectByTap(item.id)">
-                                    <van-icon v-if="selectedIds.includes(item.id)" name="success" color="#fff" size="18px" />
+                                <view class="select-icon" :class="{ checked: selectedIds.includes(item.id) }"
+                                    @tap.stop="() => toggleSelectByTap(item.id)">
+                                    <van-icon v-if="selectedIds.includes(item.id)" name="success" color="#fff"
+                                        size="18px" />
                                 </view>
                             </view>
 
                             <view v-if="isSelectMode" class="check-overlay-l">
-                                <van-checkbox :name="item.id" icon-size="18px"
-                                    :checked="selectedIds.includes(item.id)"
+                                <van-checkbox :name="item.id" icon-size="18px" :checked="selectedIds.includes(item.id)"
                                     @change="bindSelectHandler(item.id)" />
                             </view>
                         </view>
@@ -132,48 +134,56 @@
             <van-icon name="plus" size="28px" color="#FFF" />
         </view>
 
-        <van-action-sheet :show="showAddPopup" @close="showAddPopup = false" @cancel="showAddPopup = false" :actions="addActions" cancel-text="取消" @select="onAddSelect"
-            round />
+        <van-action-sheet :show="showAddPopup" @close="showAddPopup = false" @cancel="showAddPopup = false"
+            :actions="addActions" cancel-text="取消" @select="onAddSelect" round />
 
         <!-- 批量添加标签弹窗（居中卡片样式） -->
-        <van-popup v-model:show="showTagPopup" @close="showTagPopup = false"  position="center" overlay-class="tag-overlay" style="display: flex;justify-content: center;position: relative; bottom: 35vh;">
-            <view class="tag-popup-card" v-show="showTagPopup">
-                <view class="card-inner">
+
+        <view class="tag-popup-card" v-show="showTagPopup">
+            <van-popup :show="showTagPopup" @close="showTagPopup = false" round>
+                <view class="card-inner" v-show="showTagPopup">
                     <view class="card-title">
                         <text>批量添加标签</text>
                         <text class="close-btn" @tap="showTagPopup = false">取消</text>
                     </view>
 
-                    <view class="card-section">
-                        <text class="card-section-title">季节</text>
-                        <view class="options-row">
-                            <view v-for="s in seasonOptions" :key="s.id" class="opt-item" :class="{ active: selectedSeasonIds.includes(s.id) }" @tap="() => toggleSelectOption('season', s.id)">{{ s.name }}</view>
+                    <scroll-view scroll-y style="max-height: 600rpx;">
+                        <view class="card-section">
+                            <text class="card-section-title">季节</text>
+                            <view class="options-row">
+                                <view v-for="s in seasonOptions" :key="s.id" class="opt-item"
+                                    :class="{ active: selectedSeasonIds.includes(s.id) }"
+                                    @tap="() => toggleSelectOption('season', s.id)">{{ s.name }}</view>
+                            </view>
                         </view>
-                    </view>
 
-                    <view class="card-section">
-                        <text class="card-section-title">种类</text>
-                        <view class="options-row">
-                            <view v-for="c in categoryOptions" :key="c.id" class="opt-item" :class="{ active: selectedCategoryIds.includes(c.id) }" @tap="() => toggleSelectOption('category', c.id)">{{ c.name }}</view>
+                        <view class="card-section">
+                            <text class="card-section-title">种类</text>
+                            <view class="options-row">
+                                <view v-for="c in categoryOptions" :key="c.id" class="opt-item"
+                                    :class="{ active: selectedCategoryIds.includes(c.id) }"
+                                    @tap="() => toggleSelectOption('category', c.id)">{{ c.name }}</view>
+                            </view>
                         </view>
-                    </view>
 
-                    <view class="card-section">
-                        <text class="card-section-title">场景</text>
-                        <view class="options-row">
-                            <view v-for="sc in sceneOptions" :key="sc.id" class="opt-item" :class="{ active: selectedSceneIds.includes(sc.id) }" @tap="() => toggleSelectOption('scene', sc.id)">{{ sc.name }}</view>
+                        <view class="card-section">
+                            <text class="card-section-title">场景</text>
+                            <view class="options-row">
+                                <view v-for="sc in sceneOptions" :key="sc.id" class="opt-item"
+                                    :class="{ active: selectedSceneIds.includes(sc.id) }"
+                                    @tap="() => toggleSelectOption('scene', sc.id)">{{ sc.name }}</view>
+                            </view>
                         </view>
-                    </view>
+                    </scroll-view>
 
                     <view class="card-actions">
                         <view class="btn reset" @tap="resetTagSelection">重置</view>
                         <view class="btn confirm" @tap="submitBatchAddTags">确定</view>
                     </view>
                 </view>
-            </view>
-        </van-popup>
-    
-        <!-- <van-popup v-model:show="showTagPopup" position="center" round></van-popup> -->
+            </van-popup>
+        </view>
+
     </view>
 </template>
 
@@ -226,10 +236,13 @@ const selectedSeasonIds = ref<number[]>([]);
 const selectedCategoryIds = ref<number[]>([]);
 const selectedSceneIds = ref<number[]>([]);
 
+// 新增：默认分类ID，用于快速上传时避免外键错误
+const defaultCategoryId = ref<number | string>('');
+
 // 选项数据（初始为空，从后端获取）
-const seasonOptions = ref<{id: number, name: string}[]>([]);
-const categoryOptions = ref<{id: number, name: string}[]>([]);
-const sceneOptions = ref<{id: number, name: string}[]>([]);
+const seasonOptions = ref<{ id: number, name: string }[]>([]);
+const categoryOptions = ref<{ id: number, name: string }[]>([]);
+const sceneOptions = ref<{ id: number, name: string }[]>([]);
 
 // 接口地址 (根据你的后端配置调整)
 const API_BASE_URL = 'http://localhost:3000';
@@ -286,143 +299,146 @@ const onAddSelect = (action: any) => {
  * 实现开题报告中 5.2.3.2 上传衣物的功能 
  */
 const uploadClothing = (filePath: string) => {
-  console.log("1. 进入 uploadClothing 函数");
-  console.log("2. 传入的路径为:", filePath);
-  if (!filePath) {
-    console.error("错误：filePath 为空，无法上传");
-    return;
-  }
+    console.log("1. 进入 uploadClothing 函数");
+    console.log("2. 传入的路径为:", filePath);
+    if (!filePath) {
+        console.error("错误：filePath 为空，无法上传");
+        return;
+    }
 
-  const userInfo = uni.getStorageSync('userInfo');
-  const account = userInfo?.account;
-  console.log("3. 获取到的 account 为:", account);
+    const userInfo = uni.getStorageSync('userInfo');
+    const account = userInfo?.account;
+    console.log("3. 获取到的 account 为:", account);
 
-  if (!account) {
-    uni.showToast({ title: '未检测到登录，请先登录', icon: 'none' });
-    return;
-  }
+    if (!account) {
+        uni.showToast({ title: '未检测到登录，请先登录', icon: 'none' });
+        return;
+    }
 
-  // 辅助：先尝试按文件大小自适应设置压缩质量并压缩图片，失败时回退为原图
-  const compressImageIfNeeded = (path: string): Promise<string> => {
-    return new Promise((resolve) => {
-      // 默认质量
-      let quality = 70;
+    // 辅助：先尝试按文件大小自适应设置压缩质量并压缩图片，失败时回退为原图
+    const compressImageIfNeeded = (path: string): Promise<string> => {
+        return new Promise((resolve) => {
+            // 默认质量
+            let quality = 70;
 
-      // 如果能获取文件信息，根据大小调整质量
-      if (uni.getFileInfo) {
-        uni.getFileInfo({
-          filePath: path,
-          success: (info: any) => {
-            const sizeKB = (info.size || 0) / 1024;
-            if (sizeKB > 2000) {
-              quality = 50; // >2MB 降到 50
-            } else if (sizeKB > 0) {
-              quality = 60; // 1-2MB -> 60
-            } else if (sizeKB > 500) {
-              quality = 70; // 0.5-1MB -> 70
+            // 如果能获取文件信息，根据大小调整质量
+            if (uni.getFileInfo) {
+                uni.getFileInfo({
+                    filePath: path,
+                    success: (info: any) => {
+                        const sizeKB = (info.size || 0) / 1024;
+                        if (sizeKB > 2000) {
+                            quality = 50; // >2MB 降到 50
+                        } else if (sizeKB > 0) {
+                            quality = 60; // 1-2MB -> 60
+                        } else if (sizeKB > 500) {
+                            quality = 70; // 0.5-1MB -> 70
+                        } else {
+                            quality = 80; // 小文件保留较高质量
+                        }
+
+                        uni.compressImage({
+                            src: path,
+                            quality,
+                            success: (res: any) => {
+                                console.log('图片压缩成功，quality=', quality, ' path=', res.tempFilePath);
+                                resolve(res.tempFilePath || path);
+                            },
+                            fail: (err: any) => {
+                                console.warn('图片压缩失败，使用原图上传', err);
+                                resolve(path);
+                            }
+                        });
+                    },
+                    fail: () => {
+                        // 无法获取文件大小，使用默认质量压缩一次
+                        uni.compressImage({
+                            src: path,
+                            quality,
+                            success: (res: any) => {
+                                console.log('图片压缩成功 (无文件信息)', res.tempFilePath);
+                                resolve(res.tempFilePath || path);
+                            },
+                            fail: (err: any) => {
+                                console.warn('图片压缩失败 (无文件信息)，使用原图上传', err);
+                                resolve(path);
+                            }
+                        });
+                    }
+                });
             } else {
-              quality = 80; // 小文件保留较高质量
+                // 平台不支持 getFileInfo，直接压缩一次
+                uni.compressImage({
+                    src: path,
+                    quality,
+                    success: (res: any) => {
+                        console.log('图片压缩成功 (fallback)', res.tempFilePath);
+                        resolve(res.tempFilePath || path);
+                    },
+                    fail: (err: any) => {
+                        console.warn('图片压缩失败 (fallback)，使用原图上传', err);
+                        resolve(path);
+                    }
+                });
             }
-
-            uni.compressImage({
-              src: path,
-              quality,
-              success: (res: any) => {
-                console.log('图片压缩成功，quality=', quality, ' path=', res.tempFilePath);
-                resolve(res.tempFilePath || path);
-              },
-              fail: (err: any) => {
-                console.warn('图片压缩失败，使用原图上传', err);
-                resolve(path);
-              }
-            });
-          },
-          fail: () => {
-            // 无法获取文件大小，使用默认质量压缩一次
-            uni.compressImage({
-              src: path,
-              quality,
-              success: (res: any) => {
-                console.log('图片压缩成功 (无文件信息)', res.tempFilePath);
-                resolve(res.tempFilePath || path);
-              },
-              fail: (err: any) => {
-                console.warn('图片压缩失败 (无文件信息)，使用原图上传', err);
-                resolve(path);
-              }
-            });
-          }
         });
-      } else {
-        // 平台不支持 getFileInfo，直接压缩一次
-        uni.compressImage({
-          src: path,
-          quality,
-          success: (res: any) => {
-            console.log('图片压缩成功 (fallback)', res.tempFilePath);
-            resolve(res.tempFilePath || path);
-          },
-          fail: (err: any) => {
-            console.warn('图片压缩失败 (fallback)，使用原图上传',err);
-            resolve(path);
-          }
+    };
+
+    uni.showLoading({ title: '正在录入衣橱...', mask: true });
+
+    // 先压缩再上传
+    compressImageIfNeeded(filePath).then((uploadPath) => {
+        console.log('最终用于上传的图片路径：', uploadPath);
+
+        // 确保 category_id 有效，否则传空字符串，避免后端外键报错
+        const catId = defaultCategoryId.value ? String(defaultCategoryId.value) : '';
+
+        const uploadTask = uni.uploadFile({
+            url: `${API_BASE_URL}/api/clothes/add`,
+            filePath: uploadPath,
+            name: 'image', // 与后端 upload.single('image') 对应
+            formData: {
+                account: account,
+                category_id: catId, // 使用动态获取的有效ID
+                price: '0',
+                season_ids: '', // 可按需传
+                scene_ids: '',
+                remarks: '-'
+            },
+            success: (uploadRes: any) => {
+                console.log('服务器原始响应:', uploadRes);
+                let res;
+                try {
+                    res = JSON.parse(uploadRes.data);
+                } catch (e) {
+                    console.error('后端返回非 JSON：', uploadRes.data);
+                    uni.showToast({ title: '服务器返回异常', icon: 'none' });
+                    return;
+                }
+                if (res.code === 200) {
+                    uni.showToast({ title: '添加成功', icon: 'success' });
+                    loadClothesList && loadClothesList();
+                } else {
+                    console.error('后端返回业务错误:', res);
+                    uni.showToast({ title: '添加失败：' + (res.msg || res.error || '未知错误'), icon: 'none' });
+                }
+            },
+            fail: (err: any) => {
+                console.error('upload fail', err);
+                uni.showToast({ title: '网络或上传失败', icon: 'none' });
+            },
+            complete: () => {
+                console.log('请求 complete');
+                uni.hideLoading();
+            }
         });
-      }
+
+        uploadTask.onProgressUpdate((res: any) => {
+            console.log('上传进度：' + res.progress + '%', res);
+        });
+
+        // 可选：如果需要支持取消上传，保存 uploadTask 并在需要时调用 uploadTask.abort()
     });
-  };
-
-  uni.showLoading({ title: '正在录入衣橱...', mask: true });
-
-  // 先压缩再上传
-  compressImageIfNeeded(filePath).then((uploadPath) => {
-    console.log('最终用于上传的图片路径：', uploadPath);
-
-    const uploadTask = uni.uploadFile({
-      url: `${API_BASE_URL}/api/clothes/add`,
-      filePath: uploadPath,
-      name: 'image', // 与后端 upload.single('image') 对应
-      formData: {
-        account: account,
-        category_id: '1',
-        price: '0',
-        season_ids: '', // 可按需传
-        scene_ids: '',
-        remarks: '-'
-      },
-      success: (uploadRes: any) => {
-        console.log('服务器原始响应:', uploadRes);
-        let res;
-        try {
-          res = JSON.parse(uploadRes.data);
-        } catch (e) {
-          console.error('后端返回非 JSON：', uploadRes.data);
-          uni.showToast({ title: '服务器返回异常', icon: 'none' });
-          return;
-        }
-        if (res.code === 200) {
-          uni.showToast({ title: '添加成功', icon: 'success' });
-          loadClothesList && loadClothesList();
-        } else {
-          console.error('后端返回业务错误:', res);
-          uni.showToast({ title: '添加失败：' + (res.msg || res.error || '未知错误'), icon: 'none' });
-        }
-      },
-      fail: (err: any) => {
-        console.error('upload fail', err);
-        uni.showToast({ title: '网络或上传失败', icon: 'none' });
-      },
-      complete: () => {
-        console.log('请求 complete');
-        uni.hideLoading();
-      }
-    });
-
-    uploadTask.onProgressUpdate((res: any) => {
-      console.log('上传进度：' + res.progress + '%', res);
-    });
-
-    // 可选：如果需要支持取消上传，保存 uploadTask 并在需要时调用 uploadTask.abort()
-  });
 };
 
 /**
@@ -459,7 +475,17 @@ const loadClothesList = () => {
                 clothingList.value = rows.map((r: any) => {
                     // 取图片字段，兼容 image_url 或 image
                     const image = r.image_url || r.image || '';
-                    const category = r.category_name || r.category || '其他';
+
+                    // 确定主分类用于分组：如果有多个分类，取第一个；如果没有，归为“其他”
+                    let category = '其他';
+                    if (r.category_names && Array.isArray(r.category_names) && r.category_names.length > 0) {
+                        category = r.category_names[0];
+                    } else if (r.category_name) {
+                        category = r.category_name;
+                    } else if (r.category) {
+                        category = r.category;
+                    }
+
                     const price = parseFloat(r.price) || 0;
                     const date = r.created_at ? formatDate(r.created_at) : (r.date || '');
 
@@ -480,7 +506,16 @@ const loadClothesList = () => {
 
                     const tagsArr: Tag[] = [];
 
-                    // 后端直接返回的 tags 字段处理
+                    // 1. 处理分类标签 (支持多分类)
+                    // 优先使用 category_names 数组
+                    if (r.category_names && Array.isArray(r.category_names)) {
+                        r.category_names.forEach((c: string) => pushTag(tagsArr, c, tagColorCategory));
+                    } else {
+                        // 降级处理
+                        pushTag(tagsArr, category !== '其他' ? category : '', tagColorCategory);
+                    }
+
+                    // 2. 后端直接返回的 tags 字段处理
                     if (r.tags) {
                         if (Array.isArray(r.tags)) {
                             r.tags.forEach((t: any) => {
@@ -491,9 +526,6 @@ const loadClothesList = () => {
                             r.tags.split(',').forEach((t: string) => pushTag(tagsArr, t));
                         }
                     }
-
-                    // 把分类作为第一个标签（如果未被包含）
-                    pushTag(tagsArr, category, tagColorCategory);
 
                     // 支持多种可能的后端字段名来获取场景与季节信息
                     const sceneFields = ['scene_name', 'scene_names', 'scenes', 'scene'];
@@ -644,17 +676,21 @@ const openTagPopup = () => {
     }
     resetTagSelection();
     showTagPopup.value = true;
+
 };
 
 // 切换标签选项选中状态
-const toggleSelectOption = (type: 'season' | 'category' | 'scene', id: number) => {
+const toggleSelectOption = (type: 'season' | 'category' | 'scene', idParam: number | string) => {
+    const id = Number(idParam);
+    if (Number.isNaN(id)) return;
+
     let target: any;
     if (type === 'season') target = selectedSeasonIds;
     else if (type === 'category') target = selectedCategoryIds;
     else if (type === 'scene') target = selectedSceneIds;
-    
+
     if (!target) return;
-    
+
     const idx = target.value.indexOf(id);
     if (idx > -1) {
         target.value.splice(idx, 1);
@@ -672,6 +708,7 @@ const fetchTagOptions = () => {
         success: (res: any) => {
             if (res.data && res.data.code === 200) {
                 seasonOptions.value = res.data.data;
+                console.log('获取到季节选项:', seasonOptions.value);
             }
         }
     });
@@ -682,6 +719,11 @@ const fetchTagOptions = () => {
         success: (res: any) => {
             if (res.data && res.data.code === 200) {
                 categoryOptions.value = res.data.data;
+                console.log('获取到分类选项:', categoryOptions.value);
+                // 初始化默认分类ID（取第一个），防止上传时硬编码 ID 导致外键错误
+                if (categoryOptions.value.length > 0) {
+                    defaultCategoryId.value = categoryOptions.value[0].id;
+                }
             }
         }
     });
@@ -692,6 +734,7 @@ const fetchTagOptions = () => {
         success: (res: any) => {
             if (res.data && res.data.code === 200) {
                 sceneOptions.value = res.data.data;
+                console.log('获取到场景选项:', sceneOptions.value);
             }
         }
     });
@@ -731,17 +774,20 @@ const submitBatchAddTags = () => {
     const hasSeason = selectedSeasonIds.value && selectedSeasonIds.value.length > 0;
     const hasScene = selectedSceneIds.value && selectedSceneIds.value.length > 0;
     const hasCategory = selectedCategoryIds.value && selectedCategoryIds.value.length > 0;
-    
+
     if (!hasSeason && !hasScene && !hasCategory) {
         uni.showToast({ title: '请至少选择一种标签', icon: 'none' });
         return;
     }
 
-    const body: any = { ids: selectedIds.value };
-    if (hasScene) body.scene_ids = selectedSceneIds.value;
-    if (hasSeason) body.season_ids = selectedSeasonIds.value;
+    // 使用解构确保传递的是纯数组
+    const body: any = { ids: [...selectedIds.value] };
+    if (hasScene) body.scene_ids = [...selectedSceneIds.value];
+    if (hasSeason) body.season_ids = [...selectedSeasonIds.value];
     // 支持传入 category_ids
-    if (hasCategory) body.category_ids = selectedCategoryIds.value;
+    if (hasCategory) body.category_ids = [...selectedCategoryIds.value];
+
+    console.log('批量添加标签请求体:', body);
 
     uni.showLoading({ title: '正在添加标签...', mask: true });
     uni.request({
@@ -815,7 +861,7 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
 
                     :deep(.van-search__content) {
                         background-color: #fff;
-                        box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04); // 更细腻的阴影
+                        box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04); // 更细腻的阴影
                         height: 76rpx; // 再次微调高度
                         display: flex;
                         align-items: center;
@@ -826,7 +872,7 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
                     :deep(.van-search) {
                         padding: 0;
                     }
-                    
+
                     // 调整输入框内部样式
                     :deep(.van-field__input) {
                         font-size: 26rpx;
@@ -891,7 +937,7 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
                             .item-content {
                                 background: #fff;
                                 padding-right: 24rpx; // 增加右侧内边距
-                                box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.08);
+                                box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
                             }
 
                             .s-text {
@@ -913,12 +959,12 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
                 height: 76rpx;
                 background: #fff;
                 border-radius: 50%;
-                box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+                box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 transition: transform 0.2s;
-                
+
                 &:active {
                     transform: scale(0.95);
                 }
@@ -942,7 +988,7 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
             background: #fff;
             padding: 14rpx 28rpx; // 加大点击区域
             border-radius: 40rpx;
-            box-shadow: 0 2rpx 10rpx rgba(0,0,0,0.03);
+            box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.03);
             font-size: 26rpx;
             font-weight: 500;
             color: #333;
@@ -976,7 +1022,7 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
                 font-size: 22rpx;
                 color: #bbb;
                 letter-spacing: 2rpx;
-                background: rgba(255,255,255,0.6); // 增加一点背景防止文字重叠
+                background: rgba(255, 255, 255, 0.6); // 增加一点背景防止文字重叠
                 padding: 4rpx 12rpx;
                 border-radius: 8rpx;
             }
@@ -987,7 +1033,7 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
             z-index: 2;
             display: flex;
             align-items: center;
-            
+
             .select-trigger {
                 font-size: 26rpx;
                 font-weight: 500;
@@ -995,13 +1041,13 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
                 padding: 14rpx 32rpx;
                 border-radius: 40rpx;
                 background: #fff;
-                box-shadow: 0 2rpx 10rpx rgba(0,0,0,0.03);
+                box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.03);
                 transition: all 0.3s;
 
                 &.editing {
                     background: #222;
                     color: #fff;
-                    box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.15);
+                    box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.15);
                 }
             }
         }
@@ -1037,7 +1083,7 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
             background: #fff;
             border-radius: 24rpx; // 更大的圆角
             padding: 16rpx; // 增加内边距
-            box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); // 更柔和的阴影
+            box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04); // 更柔和的阴影
             display: flex;
             flex-direction: column;
             transition: all 0.3s;
@@ -1046,7 +1092,7 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
                 position: relative;
                 width: 100%;
                 // 使用 padding-bottom hack 实现 1:1 正方形图片区域
-                padding-bottom: 100%; 
+                padding-bottom: 100%;
                 height: 0;
                 border-radius: 20rpx; // 图片圆角跟随卡片
                 overflow: hidden;
@@ -1075,7 +1121,7 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
                     top: 0;
                     right: 0;
                     bottom: 0;
-                    background: rgba(0,0,0,0.05); // 更淡的遮罩
+                    background: rgba(0, 0, 0, 0.05); // 更淡的遮罩
                     z-index: 1;
                     display: flex;
                     align-items: flex-start;
@@ -1088,16 +1134,16 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
                     width: 44rpx;
                     height: 44rpx;
                     border-radius: 50%;
-                    border: 2rpx solid rgba(255,255,255,0.6);
+                    border: 2rpx solid rgba(255, 255, 255, 0.6);
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    background: rgba(255,255,255,0.1);
+                    background: rgba(255, 255, 255, 0.1);
                 }
 
                 .select-icon.checked {
-                    background: rgba(164,194,244,0.95);
-                    border-color: rgba(164,194,244,0.95);
+                    background: rgba(164, 194, 244, 0.95);
+                    border-color: rgba(164, 194, 244, 0.95);
                 }
             }
 
@@ -1150,23 +1196,23 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
                     top: 0;
                     right: 0;
                     bottom: 0;
-                    background: rgba(0,0,0,0.1);
+                    background: rgba(0, 0, 0, 0.1);
                     z-index: 1;
                     border-radius: 16rpx;
                     display: flex;
                     align-items: center;
                     justify-content: center;
                 }
-                
+
                 .select-icon {
                     width: 48rpx;
                     height: 48rpx;
                     border-radius: 50%;
-                    background: rgba(255,255,255,0.9);
+                    background: rgba(255, 255, 255, 0.9);
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    
+
                     &.checked {
                         background: $morandi-blue;
                         color: #fff;
@@ -1195,12 +1241,12 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
                         font-size: 32rpx; // 加大主要数字
                         font-weight: 600;
                         color: $text-main;
-                        
+
                         .currency {
                             font-size: 22rpx;
                             margin-right: 2rpx;
                         }
-                        
+
                         .unit {
                             font-size: 22rpx;
                             color: $text-grey;
@@ -1223,7 +1269,7 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
                     display: flex;
                     align-items: center;
                     gap: 12rpx;
-                    
+
                     .divider {
                         width: 1px;
                         height: 16rpx;
@@ -1334,22 +1380,26 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
     }
 
     /* 弹窗卡片样式（居中） */
-    .tag-overlay {
-        background: rgba(0,0,0,0.35);
-    }
-
     .tag-popup-card {
-    
-        width: 640rpx;
-        max-width: 92%;
-        background: #fff;
+        justify-content: center;
+        align-items: center;
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 120;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(0, 0, 0, 0.4);
         border-radius: 20rpx;
-        box-shadow: 0 20rpx 40rpx rgba(0,0,0,0.15);
         overflow: hidden;
     }
 
     .card-inner {
         padding: 28rpx;
+        border-radius: 16rpx;
+        background: #fff;
+        box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.1);
+        margin: 35% 10% 0;
     }
 
     .card-title {
@@ -1424,5 +1474,6 @@ $shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
     .card-actions .btn.confirm {
         background: $morandi-blue;
         color: #fff;
-    }}
+    }
+}
 </style>
