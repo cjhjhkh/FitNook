@@ -1,0 +1,101 @@
+{
+	// "easycom": { //写这个配置，可以自动注册组件（不知道为啥没生效）
+	// 	"autoscan": true,
+	// 	"custom": {
+	// 		"^van-(.*)": "/wxcomponents/vant/$1/index"
+	// 	}
+	// },
+	"pages": [
+		{
+			"path": "pages/login/login",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/register/register",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/wardrobe/index",
+			"style": {
+				"navigationBarTitleText": "我的衣橱"
+			}
+		},
+		{
+			"path": "pages/wardrobe/detail",
+			"style": {
+				"navigationBarTitleText": "详情"
+			}
+		},
+		{
+			"path": "pages/index/index",
+			"style": {
+				"navigationBarTitleText": "穿搭灵感"
+			}
+		},
+		{
+			"path": "pages/outfit/index",
+			"style": {
+				"navigationBarTitleText": "搭配方案"
+			}
+		},
+		{
+			"path": "pages/my/index",
+			"style": {
+				"navigationBarTitleText": "个人中心"
+			}
+		}
+
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "电子衣橱",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8",
+		"usingComponents": {
+			"van-button": "/wxcomponents/vant/button/index",
+			"van-tabbar": "/wxcomponents/vant/tabbar/index",
+			"van-tabbar-item": "/wxcomponents/vant/tabbar-item/index",
+			"van-icon": "/wxcomponents/vant/icon/index",
+			"van-search": "/wxcomponents/vant/search/index",
+			"van-dropdown-menu": "/wxcomponents/vant/dropdown-menu/index",
+			"van-tag": "/wxcomponents/vant/tag/index",
+			"van-action-sheet": "/wxcomponents/vant/action-sheet/index"
+		}
+	},
+	"tabBar": {
+		"color": "#7A7E83",
+		"selectedColor": "#1989fa",
+		"borderStyle": "black",
+		"backgroundColor": "#ffffff",
+		"list": [
+			{
+				"pagePath": "pages/index/index",
+				"text": "首页"
+				// "iconPath": "static/tabbar/home.png",
+				// "selectedIconPath": "static/tabbar/home-active.png"
+			},
+			{
+				"pagePath": "pages/wardrobe/index",
+				"text": "衣橱"
+				// "iconPath": "static/tabbar/closet.png",
+				// "selectedIconPath": "static/tabbar/closet-active.png"
+			},
+			{
+				"pagePath": "pages/outfit/index",
+				"text": "穿搭"
+				// "iconPath": "static/tabbar/outfit.png",
+				// "selectedIconPath": "static/tabbar/outfit-active.png"
+			},
+			{
+				"pagePath": "pages/my/index",
+				"text": "我的"
+				// "iconPath": "static/tabbar/user.png",
+				// "selectedIconPath": "static/tabbar/user-active.png"
+			}
+		]
+	}
+}

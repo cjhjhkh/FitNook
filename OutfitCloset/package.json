@@ -1,0 +1,24 @@
+{
+  "name": "outfitclosetx",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@vant/weapp": "^1.11.7",
+    "mysql2": "^3.16.0",
+    "vue": "^3.5.26"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "^3.4.28",
+    "@types/uni-app": "^1.4.8",
+    "miniprogram-api-typings": "^4.1.2",
+    "typescript": "^5.9.3"
+  }
+}
