@@ -19,8 +19,7 @@
 					<view class="avatar-wrapper" @click="chooseAvatar">
 						<image :src="form.avatar || '/static/images/default-avatar.png'" mode="aspectFill"
 							class="avatar-img" />
-						<view class="upload-icon"><uni-icons type="camera-filled" size="14" color="#fff"></uni-icons>
-						</view>
+						<view class="upload-icon"><van-icon name="photograph" size="14" color="#fff" /></view>
 					</view>
 					<view class="input-item">
 						<text class="input-label">你的昵称</text>

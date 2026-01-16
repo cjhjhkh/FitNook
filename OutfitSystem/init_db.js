@@ -101,6 +101,59 @@ async function initDB() {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='标签关联中间表';
         `);
 
+        await connection.query(`
+            CREATE TABLE outfits (
+                id bigint NOT NULL AUTO_INCREMENT COMMENT '穿搭ID',
+                user_id bigint NOT NULL COMMENT '所属用户',
+                name varchar(100) DEFAULT '未命名穿搭' COMMENT '穿搭名称',
+                image_url varchar(255) DEFAULT NULL COMMENT '穿搭预览图(合成)',
+                bg_color varchar(20) DEFAULT '#ffffff' COMMENT '背景颜色',
+                description text COMMENT '穿搭描述',
+                weather varchar(50) DEFAULT NULL COMMENT '天气',
+                temperature varchar(20) DEFAULT NULL COMMENT '温度',
+                created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                PRIMARY KEY (id),
+                KEY idx_outfits_user (user_id),
+                CONSTRAINT fk_outfits_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='穿搭表';
+        `);
+
+        await connection.query(`
+            CREATE TABLE outfit_items (
+                id bigint NOT NULL AUTO_INCREMENT,
+                outfit_id bigint NOT NULL COMMENT '穿搭ID',
+                cloth_id bigint NOT NULL COMMENT '单品ID',
+                image_url varchar(255) DEFAULT NULL COMMENT '单品图片快照',
+                position_x decimal(10,4) DEFAULT 0 COMMENT 'X坐标百分比',
+                position_y decimal(10,4) DEFAULT 0 COMMENT 'Y坐标百分比',
+                scale decimal(5,2) DEFAULT 1.0 COMMENT '缩放比例',
+                rotation decimal(5,2) DEFAULT 0 COMMENT '旋转角度',
+                z_index int DEFAULT 0 COMMENT '层级',
+                is_flipped tinyint(1) DEFAULT 0 COMMENT '是否翻转',
+                is_locked tinyint(1) DEFAULT 0 COMMENT '是否锁定',
+                PRIMARY KEY (id),
+                KEY idx_outfit_items_outfit (outfit_id),
+                KEY idx_outfit_items_cloth (cloth_id),
+                CONSTRAINT fk_items_outfit FOREIGN KEY (outfit_id) REFERENCES outfits (id) ON DELETE CASCADE,
+                CONSTRAINT fk_items_cloth FOREIGN KEY (cloth_id) REFERENCES clothes (id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='穿搭单品关联表';
+        `);
+
+        await connection.query(`
+            CREATE TABLE outfit_calendar (
+                id bigint NOT NULL AUTO_INCREMENT,
+                user_id bigint NOT NULL COMMENT '用户ID',
+                outfit_id bigint NOT NULL COMMENT '穿搭ID',
+                date date NOT NULL COMMENT '日期',
+                created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY idx_calendar_user_date (user_id, date),
+                CONSTRAINT fk_calendar_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+                CONSTRAINT fk_calendar_outfit FOREIGN KEY (outfit_id) REFERENCES outfits (id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='穿搭日历表';
+        `);
+
         // 4. 预填数据
         console.log('🌱 正在写入初始数据...');
 

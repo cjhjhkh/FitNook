@@ -31,8 +31,8 @@ export const loginApi = (data : any) => {
  */
 export const updateProfileApi = (data : any) => {
     return request({
-        url: '/user/profile', // 请根据你后端的实际路径调整
-        method: 'POST',
+        url: '/user/profile', 
+        method: 'PUT',
         data
     });
 };
@@ -44,5 +44,29 @@ export const getUserInfoApi = () => {
     return request({
         url: '/user/info',
         method: 'GET'
+    });
+};
+
+/**
+ * 获取用户详细资料 (包含身材数据)
+ * @param account 
+ */
+export const getUserProfileApi = (account: string) => {
+    return request({
+        url: '/user/profile',
+        method: 'GET',
+        data: { account }
+    });
+};
+
+/**
+ * 获取用户统计数据 (衣物数、搭配数)
+ * @param account 
+ */
+export const getUserStatsApi = (account: string) => {
+    return request({
+        url: '/user/stats',
+        method: 'GET',
+        data: { account }
     });
 };

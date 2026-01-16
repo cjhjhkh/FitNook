@@ -1,7 +1,8 @@
 <template>
 	<view class="login-container">
 		<view class="illustration-section">
-			<image class="main-char" src="/static/images/fashion-girl.png" mode="aspectFit" />
+			<!-- 临时替换为已存在的图片，原路径 /static/images/fashion-girl.png 不存在 -->
+			<image class="main-char" src="/static/image/clothing1.png" mode="aspectFit" />
 			<view class="floating-icons">
 				<view class="icon-item t-shirt"></view>
 				<view class="icon-item pants"></view>
@@ -15,24 +16,26 @@
 
 		<view class="form-section">
 			<view class="input-wrap">
-				<uni-icons type="person" size="18" color="#999"></uni-icons>
+					<van-icon name="manager" size="18px" color="#999" />
 				<input v-model="form.account" placeholder="account / Email" placeholder-class="placeholder-style" />
 			</view>
 
 			<view class="input-wrap">
-				<uni-icons type="locked" size="18" color="#999"></uni-icons>
+					<van-icon name="lock" size="18px" color="#999" />
 				<input v-model="form.password" type="password" placeholder="Password"
 					placeholder-class="placeholder-style" />
-				<uni-icons type="eye" size="18" color="#999" class="eye-icon"></uni-icons>
+				<view class="eye-icon">
+					<van-icon name="eye-o" size="18px" color="#999" />
+				</view>
 			</view>
 
 			<button class="btn-camera-login" @click="handleLogin">
-				<uni-icons type="paperplane-filled" size="20" color="#fff"></uni-icons>
+				<van-icon name="guide-o" size="20px" color="#fff" style="margin-right: 8px;" />
 				<text>Sign In Now</text>
 			</button>
 
 			<view class="register-link" @click="toRegister">
-				<uni-icons type="personadd" size="18" color="#fff"></uni-icons>
+				<van-icon name="add-o" size="18px" color="#fff" />
 				<text>Create New Account</text>
 			</view>
 		</view>
@@ -68,24 +71,42 @@ const handleLogin = async () => {
 			account: form.account,
 			password: form.password
 		});
+		
+		console.log('Login response:', res);
 
 		// 3. 存储 Token 和用户信息到本地缓存
-		// 这样后续的 API 请求拦截器会自动读取 token
-		// uni.setStorageSync('token', res.token);
-		// uni.setStorageSync('userInfo', res.user || { account: form.account });
-		uni.setStorageSync('token', res.token);
-        uni.setStorageSync('userInfo', res.userInfo); // 存储后端返回的完整 userInfo
+		if (res && res.code === 200) {
+			// 兼容处理：防止后端返回结构变化，尝试从 res 或 res.data 中获取
+			const userInfo = res.userInfo || (res.data && res.data.userInfo);
+			const token = res.token || (res.data && res.data.token);
+			
+			if (!userInfo) {
+				console.error('User info is missing in response', res);
+				uni.showToast({ title: 'Login error: User info missing', icon: 'none' });
+				return;
+			}
+			
+			uni.setStorageSync('token', token);
+			uni.setStorageSync('userInfo', userInfo);
 
-		uni.showToast({ title: 'Welcome Back!', icon: 'success' });
+			uni.showToast({ title: 'Welcome Back!', icon: 'success' });
 
-		// 4. 跳转首页：通过 URL 参数告知首页弹出你的“引导卡片”
-		setTimeout(() => {
-			// 根据后端返回的状态决定是否显示引导
-			const url = res.userInfo.is_profile_completed === 0
-				? '/pages/index/index?isNewUser=true'
-				: '/pages/index/index';
-			uni.reLaunch({ url });
-		}, 1000);
+			// 4. 跳转首页：通过 URL 参数告知首页弹出你的“引导卡片”
+			setTimeout(() => {
+				// 严格检查 userInfo 是否存在，以及 is_profile_completed 属性
+				// 使用可选链 ?. (如果环境支持) 或者传统检查
+				const isCompleted = userInfo ? userInfo.is_profile_completed : 1;
+				
+				// 如果是 0，说明未完成资料
+				const url = (isCompleted === 0)
+					? '/pages/index/index?isNewUser=true'
+					: '/pages/index/index';
+					
+				uni.reLaunch({ url });
+			}, 1000);
+		} else {
+			uni.showToast({ title: res.message || 'Login failed', icon: 'none' });
+		}
 
 	} catch (err: any) {
 		// 错误提示已由 request.ts 拦截器统一处理，这里不需要再弹窗

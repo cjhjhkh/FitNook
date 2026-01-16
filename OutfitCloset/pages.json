@@ -1,10 +1,10 @@
 {
-	// "easycom": { //写这个配置，可以自动注册组件（不知道为啥没生效）
-	// 	"autoscan": true,
-	// 	"custom": {
-	// 		"^van-(.*)": "/wxcomponents/vant/$1/index"
-	// 	}
-	// },
+	"easycom": {
+		"autoscan": true,
+		"custom": {
+			"^uni-(.*)": "@dcloudio/uni-ui/lib/uni-$1/uni-$1.vue"
+		}
+	},
 	"pages": [
 		{
 			"path": "pages/login/login",
@@ -31,6 +31,12 @@
 			}
 		},
 		{
+			"path": "pages/wardrobe/tag-manager",
+			"style": {
+				"navigationBarTitleText": "标签管理"
+			}
+		},
+		{
 			"path": "pages/index/index",
 			"style": {
 				"navigationBarTitleText": "穿搭灵感"
@@ -40,6 +46,19 @@
 			"path": "pages/outfit/index",
 			"style": {
 				"navigationBarTitleText": "搭配方案"
+			}
+		},
+		{
+			"path": "pages/outfit/create",
+			"style": {
+				"navigationBarTitleText": "创建搭配",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/outfit/diary",
+			"style": {
+				"navigationBarTitleText": "穿搭日历"
 			}
 		},
 		{
@@ -63,7 +82,20 @@
 			"van-search": "/wxcomponents/vant/search/index",
 			"van-dropdown-menu": "/wxcomponents/vant/dropdown-menu/index",
 			"van-tag": "/wxcomponents/vant/tag/index",
-			"van-action-sheet": "/wxcomponents/vant/action-sheet/index"
+			"van-action-sheet": "/wxcomponents/vant/action-sheet/index",
+			"van-field": "/wxcomponents/vant/field/index",
+			"van-cell": "/wxcomponents/vant/cell/index",
+			"van-cell-group": "/wxcomponents/vant/cell-group/index",
+			"van-popup": "/wxcomponents/vant/popup/index",
+			"van-picker": "/wxcomponents/vant/picker/index",
+			"van-checkbox": "/wxcomponents/vant/checkbox/index",
+			"van-checkbox-group": "/wxcomponents/vant/checkbox-group/index",
+			"van-skeleton": "/wxcomponents/vant/skeleton/index",
+			"van-empty": "/wxcomponents/vant/empty/index",
+			"van-nav-bar": "/wxcomponents/vant/nav-bar/index",
+			"van-tabs": "/wxcomponents/vant/tabs/index",
+			"van-tab": "/wxcomponents/vant/tab/index",
+			"van-dialog": "/wxcomponents/vant/dialog/index"
 		}
 	},
 	"tabBar": {
@@ -75,26 +107,18 @@
 			{
 				"pagePath": "pages/index/index",
 				"text": "首页"
-				// "iconPath": "static/tabbar/home.png",
-				// "selectedIconPath": "static/tabbar/home-active.png"
 			},
 			{
 				"pagePath": "pages/wardrobe/index",
 				"text": "衣橱"
-				// "iconPath": "static/tabbar/closet.png",
-				// "selectedIconPath": "static/tabbar/closet-active.png"
 			},
 			{
 				"pagePath": "pages/outfit/index",
 				"text": "穿搭"
-				// "iconPath": "static/tabbar/outfit.png",
-				// "selectedIconPath": "static/tabbar/outfit-active.png"
 			},
 			{
 				"pagePath": "pages/my/index",
 				"text": "我的"
-				// "iconPath": "static/tabbar/user.png",
-				// "selectedIconPath": "static/tabbar/user-active.png"
 			}
 		]
 	}

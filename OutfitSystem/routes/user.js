@@ -180,4 +180,57 @@ router.put('/profile', async (req, res) => {
     }
 });
 
+/**
+ * [获取个人资料接口]
+ */
+router.get('/profile', async (req, res) => {
+    const { account } = req.query;
+    if (!account) return res.status(400).json({ code: 400, msg: '参数缺失' });
+
+    try {
+        const [rows] = await db.query(`
+            SELECT u.account, p.*
+            FROM users u 
+            LEFT JOIN user_profiles p ON u.id = p.user_id 
+            WHERE u.account = ?
+        `, [account]);
+
+        if (rows.length === 0) return res.status(404).json({ code: 404, msg: '用户不存在' });
+
+        res.json({ code: 200, data: rows[0] });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ code: 500, msg: '获取资料失败' });
+    }
+});
+
+/**
+ * [获取用户统计数据]
+ * 返回：衣物数量、搭配数量
+ */
+router.get('/stats', async (req, res) => {
+    const { account } = req.query;
+    if (!account) return res.status(400).json({ code: 400, msg: '参数缺失' });
+
+    try {
+        const [userRows] = await db.query('SELECT id FROM users WHERE account = ?', [account]);
+        if (userRows.length === 0) return res.status(404).json({ code: 404, msg: '用户不存在' });
+        const userId = userRows[0].id;
+
+        const [clothesCount] = await db.query('SELECT COUNT(*) as total FROM clothes WHERE user_id = ?', [userId]);
+        const [outfitsCount] = await db.query('SELECT COUNT(*) as total FROM outfits WHERE user_id = ?', [userId]);
+
+        res.json({
+            code: 200,
+            data: {
+                clothes: clothesCount[0].total,
+                outfits: outfitsCount[0].total
+            }
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ code: 500, msg: '获取统计失败' });
+    }
+});
+
 module.exports = router;

@@ -16,11 +16,15 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // 确保 routes 文件夹下有对应的 user.js 和 clothes.js
 const userRouter = require('./routes/user');
 const clothesRouter = require('./routes/clothes'); 
+const outfitRouter = require('./routes/outfit'); 
+const uploadRouter = require('./routes/upload'); // 引入上传路由
 
 // --- 3. 挂载路由 ---
 // 这里的第一个参数决定了前端请求的基础路径
 app.use('/api/user', userRouter);       // 对应前端: http://localhost:3000/api/user/...
 app.use('/api/clothes', clothesRouter); // 对应前端: http://localhost:3000/api/clothes/...
+app.use('/api/outfits', outfitRouter);  
+app.use('/api/upload', uploadRouter);   // 挂载上传接口
 
 // --- 4. 404 捕获 (处理未定义的路径) ---
 app.use((req, res, next) => {

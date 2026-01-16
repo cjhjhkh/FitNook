@@ -11,9 +11,9 @@
                     <view class="season-wrap">
                         <view v-for="s in seasons" :key="s.name" class="season-item"
                             :class="{ active: activeSeason === s.name }" @tap="handleSeasonChange(s.name)">
-                            <view class="item-content">
-                                <view class="icon-box" :style="{ backgroundColor: s.backgroundColor }">
-                                    <van-icon :name="s.icon" size="14px" class="s-icon" />
+                            <view class="item-content" :style="activeSeason === s.name ? { backgroundColor: s.backgroundColor, boxShadow: '0 2rpx 8rpx rgba(0,0,0,0.05)' } : {}">
+                                <view class="icon-box" :style="{ backgroundColor: activeSeason === s.name ? '#ffffff' : s.backgroundColor }">
+                                    <van-icon :name="s.icon" size="14px" class="s-icon" :color="activeSeason === s.name ? '#333' : '#666'" />
                                 </view>
                                 <text v-if="activeSeason === s.name" class="s-text">{{ s.name }}</text>
                             </view>
@@ -22,7 +22,12 @@
                 </scroll-view>
 
                 <view class="layout-toggle" @tap="toggleLayout">
-                    <van-icon :name="isGridLayout ? 'apps-o' : 'orders-o'" size="22px" color="#666" />
+                    <van-icon :name="isGridLayout ? 'apps-o' : 'orders-o'" size="22px" color="#666" style="pointer-events: none;" />
+                </view>
+                
+                <!-- 新增：标签管理入口 -->
+                <view class="layout-toggle" @tap="openTagManager" style="margin-left: 16rpx;">
+                    <van-icon name="setting-o" size="22px" color="#666" />
                 </view>
             </view>
         </view>
@@ -34,7 +39,19 @@
                 <view class="filter-dot"></view>
             </view>
             <view class="center-status">
-                <text v-if="!isSelectMode" class="status-tag">{{ activeSeason }}衣物</text>
+                <template v-if="!isSelectMode">
+                    <!-- 如果有筛选标签，显示标签列表 -->
+                    <scroll-view v-if="activeFilterTags.length > 0" scroll-x class="filter-tags-scroll" :show-scrollbar="false">
+                        <view class="filter-tags-row">
+                            <view v-for="tag in activeFilterTags" :key="`${tag.type}-${tag.id}`" class="active-filter-tag" @tap="removeFilterTag(tag)">
+                                <text>{{ tag.name }}</text>
+                                <van-icon name="cross" size="12px" class="close-icon" />
+                            </view>
+                        </view>
+                    </scroll-view>
+                    <!-- 否则显示默认标题 -->
+                    <text v-else class="status-tag">{{ activeSeason }}衣物</text>
+                </template>
             </view>
             <view class="right-tools" @tap="toggleSelectMode">
                 <view class="select-trigger" :class="{ editing: isSelectMode }">
@@ -43,14 +60,14 @@
             </view>
         </view>
 
-        <scroll-view class="main-list" scroll-y>
+        <scroll-view class="main-list" scroll-y @scrolltolower="onScrollToLower">
             <view v-for="group in clothGroups" :key="group.category" class="group-section">
                 <view class="group-title">
                     {{ group.category }} <text class="num">{{ group.list.length }}</text>
                 </view>
 
                 <view v-if="isGridLayout" class="grid-container transition-fade">
-                    <view v-for="item in group.list" :key="item.id" class="cloth-card-grid">
+                    <view v-for="item in group.list" :key="item.id" class="cloth-card-grid" @tap="handleCardTap(item)">
                         <view class="img-wrapper">
                             <image :src="item.image" mode="aspectFill" class="cloth-img" />
 
@@ -69,15 +86,17 @@
                                     :checked="selectedIds.includes(item.id)" @change="bindSelectHandler(item.id)" />
                             </view>
                         </view>
+                        
+                        <!-- 标签行：单行显示，超出省略 -->
                         <view class="tag-row">
-                            <view v-for="tag in item.tags" :key="tag.name" class="mini-tag"
-                                :style="{ backgroundColor: tag.color }">{{ tag.name }}</view>
+                            <text v-for="tag in item.tags" :key="tag.name" class="mini-tag"
+                                :style="{ backgroundColor: tag.color }">{{ tag.name }}</text>
                         </view>
                     </view>
                 </view>
 
                 <view v-else class="list-container transition-fade">
-                    <view v-for="item in group.list" :key="item.id" class="cloth-card-list">
+                    <view v-for="item in group.list" :key="item.id" class="cloth-card-list" @tap="handleCardTap(item)">
                         <view class="list-img-box">
                             <image :src="item.image" mode="aspectFill" class="cloth-img-l" />
 
@@ -112,6 +131,10 @@
                         </view>
                     </view>
                 </view>
+            </view>
+            <view class="loading-status" v-if="isLoading || isFinished">
+                <van-loading v-if="isLoading" size="24px" type="spinner">加载中...</van-loading>
+                <text v-else-if="isFinished && clothingList.length > 0" class="no-more">没有更多了</text>
             </view>
             <view class="safe-area-bottom"></view>
         </scroll-view>
@@ -151,7 +174,7 @@
                         <view class="card-section">
                             <text class="card-section-title">季节</text>
                             <view class="options-row">
-                                <view v-for="s in seasonOptions" :key="s.id" class="opt-item"
+                                <view v-for="s in displaySeasonOptions" :key="s.id" class="opt-item"
                                     :class="{ active: selectedSeasonIds.includes(s.id) }"
                                     @tap="() => toggleSelectOption('season', s.id)">{{ s.name }}</view>
                             </view>
@@ -160,7 +183,7 @@
                         <view class="card-section">
                             <text class="card-section-title">种类</text>
                             <view class="options-row">
-                                <view v-for="c in categoryOptions" :key="c.id" class="opt-item"
+                                <view v-for="c in displayCategoryOptions" :key="c.id" class="opt-item"
                                     :class="{ active: selectedCategoryIds.includes(c.id) }"
                                     @tap="() => toggleSelectOption('category', c.id)">{{ c.name }}</view>
                             </view>
@@ -169,498 +192,329 @@
                         <view class="card-section">
                             <text class="card-section-title">场景</text>
                             <view class="options-row">
-                                <view v-for="sc in sceneOptions" :key="sc.id" class="opt-item"
+                                <view v-for="sc in displaySceneOptions" :key="sc.id" class="opt-item"
                                     :class="{ active: selectedSceneIds.includes(sc.id) }"
                                     @tap="() => toggleSelectOption('scene', sc.id)">{{ sc.name }}</view>
                             </view>
                         </view>
-                    </scroll-view>
 
-                    <view class="card-actions">
-                        <view class="btn reset" @tap="resetTagSelection">重置</view>
-                        <view class="btn confirm" @tap="submitBatchAddTags">确定</view>
-                    </view>
+                        <view class="confirm-btn" @tap="submitBatchTags">确定</view>
+                    </scroll-view>
                 </view>
             </van-popup>
         </view>
 
+        <!-- 筛选抽屉 -->
+        <van-popup :show="showFilter" position="right" custom-style="width: 80%; height: 100%;" @close="showFilter = false">
+            <view class="filter-drawer">
+                <view class="drawer-title">筛选衣物</view>
+                <scroll-view scroll-y class="drawer-content">
+                    <!-- Categories -->
+                    <view class="filter-section">
+                        <view class="section-header">分类</view>
+                        <view class="tags-grid">
+                            <view v-for="c in displayCategoryOptions" :key="c.id" 
+                                class="filter-tag" 
+                                :class="{ active: filterForm.category_ids.includes(c.id) }"
+                                @tap="toggleFilterOption('category', c.id)">
+                                {{ c.name }}
+                            </view>
+                        </view>
+                    </view>
+                    <!-- Scenes -->
+                    <view class="filter-section">
+                        <view class="section-header">场景</view>
+                        <view class="tags-grid">
+                            <view v-for="s in displaySceneOptions" :key="s.id" 
+                                class="filter-tag" 
+                                :class="{ active: filterForm.scene_ids.includes(s.id) }"
+                                @tap="toggleFilterOption('scene', s.id)">
+                                {{ s.name }}
+                            </view>
+                        </view>
+                    </view>
+                    <!-- Seasons -->
+                    <view class="filter-section">
+                        <view class="section-header">季节</view>
+                        <view class="tags-grid">
+                            <view v-for="s in displaySeasonOptions" :key="s.id" 
+                                class="filter-tag" 
+                                :class="{ active: filterForm.season_ids.includes(s.id) }"
+                                @tap="toggleFilterOption('season', s.id)">
+                                {{ s.name }}
+                            </view>
+                        </view>
+                    </view>
+                    <!-- Colors -->
+                    <view class="filter-section">
+                        <view class="section-header">颜色</view>
+                        <view class="colors-grid">
+                            <view v-for="col in colorOptions" :key="col.value" 
+                                class="color-item"
+                                :class="{ active: filterForm.color === col.value }"
+                                @tap="filterForm.color = (filterForm.color === col.value ? '' : col.value)">
+                                <view class="color-circle" :style="{ background: col.hex, border: col.value === '白' ? '1px solid #eee' : 'none' }"></view>
+                                <text class="color-name">{{ col.name }}</text>
+                            </view>
+                        </view>
+                    </view>
+                </scroll-view>
+                <view class="drawer-actions">
+                    <van-button type="default" custom-class="action-btn" @tap="resetFilter">重置</van-button>
+                    <van-button type="primary" custom-class="action-btn" @tap="applyFilter">确认</van-button>
+                </view>
+            </view>
+        </van-popup>
     </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, reactive, computed } from 'vue';
+import { onShow, onReachBottom } from '@dcloudio/uni-app';
+import { 
+    getClothesList, 
+    batchDeleteClothes, 
+    batchAddTags,
+    getCategories,
+    getScenes,
+    getSeasons,
+    uploadClothes
+} from '@/api/clothes';
 
-// --- 接口定义 ---
-interface Tag {
-    name: string;
-    color: string;
-}
-
-interface ClothingItem {
-    id: number;
-    image: string;
-    category: string;
-    price: number;
-    times: number;
-    date: string;
-    tags: Tag[];
-    costPerTime: number;
-}
-
-interface ClothGroup {
-    category: string;
-    list: ClothingItem[];
-}
-
-// --- 响应式数据 ---
+// --- 状态定义 ---
 const searchKeyword = ref('');
-const seasons = [
-    { name: '全部', icon: 'apps-o', backgroundColor: '#D3CBC5' },
-    { name: '春', icon: 'flower-o', backgroundColor: '#E4DAD1' },
-    { name: '夏', icon: 'fire-o', backgroundColor: '#F2E8CF' },
-    { name: '秋', icon: 'fire-o', backgroundColor: '#D8C3A5' },
-    { name: '冬', icon: 'points', backgroundColor: '#A4B3B6' }
-];
 const activeSeason = ref('全部');
 const isGridLayout = ref(true);
 const isSelectMode = ref(false);
-const selectedIds = ref<number[]>([]);
-const showFilter = ref(false);
+const showFilter = ref(false); // 筛选抽屉（暂未实现具体内容，保留状态）
+const activeFilterTags = ref<any[]>([]); // 当前选中的筛选标签
+
+const clothingList = ref<any[]>([]);
+const total = ref(0);
+const page = ref(1);
+const pageSize = ref(20);
+const isLoading = ref(false);
+const isFinished = ref(false);
+
+const selectedIds = ref<any[]>([]);
+
+// 季节配置
+const seasons = [
+    { name: '全部', icon: 'apps-o', backgroundColor: '#f5f5f5' },
+    { name: '春', icon: 'flower-o', backgroundColor: '#e8f5e9' },
+    { name: '夏', icon: 'fire-o', backgroundColor: '#fff3e0' },
+    { name: '秋', icon: 'leaf-o', backgroundColor: '#fbe9e7' },
+    { name: '冬', icon: 'snow-o', backgroundColor: '#e3f2fd' }
+];
+
+// 添加菜单
 const showAddPopup = ref(false);
-// 新增：控制标签弹窗显示
+const addActions = [
+    { name: '拍照录入', icon: 'photograph' },
+    { name: '相册导入', icon: 'photo' },
+    { name: 'DIY搭配', icon: 'edit' } // 把歧义的“手动录入”改个名字更贴切
+];
+
+// 批量标签弹窗
 const showTagPopup = ref(false);
-const clothingList = ref<ClothingItem[]>([]);
+const displaySeasonOptions = ref<any[]>([]);
+const displayCategoryOptions = ref<any[]>([]);
+const displaySceneOptions = ref<any[]>([]);
+const selectedSeasonIds = ref<any[]>([]);
+const selectedCategoryIds = ref<any[]>([]);
+const selectedSceneIds = ref<any[]>([]);
 
-// 新增：标签弹窗相关数据
-const selectedSeasonIds = ref<number[]>([]);
-const selectedCategoryIds = ref<number[]>([]);
-const selectedSceneIds = ref<number[]>([]);
-
-// 新增：默认分类ID，用于快速上传时避免外键错误
-const defaultCategoryId = ref<number | string>('');
-
-// 选项数据（初始为空，从后端获取）
-const seasonOptions = ref<{ id: number, name: string }[]>([]);
-const categoryOptions = ref<{ id: number, name: string }[]>([]);
-const sceneOptions = ref<{ id: number, name: string }[]>([]);
-
-// 接口地址 (根据你的后端配置调整)
-const API_BASE_URL = 'http://localhost:3000';
-
-// 数据分组计算属性
-const clothGroups = computed(() => {
-    const groups: Record<string, ClothingItem[]> = {};
-    clothingList.value.forEach((item: ClothingItem) => {
-        if (!groups[item.category]) groups[item.category] = [];
-        groups[item.category].push(item);
-    });
-    return Object.keys(groups).map(key => ({
-        category: key,
-        list: groups[key]
-    }));
+// 筛选表单
+const filterForm = ref({
+    category_ids: [] as number[],
+    scene_ids: [] as number[],
+    season_ids: [] as number[],
+    color: ''
 });
 
+const colorOptions = [
+    { name: '黑', value: '黑', hex: '#000000' },
+    { name: '白', value: '白', hex: '#FFFFFF' },
+    { name: '灰', value: '灰', hex: '#808080' },
+    { name: '红', value: '红', hex: '#FF0000' },
+    { name: '橙', value: '橙', hex: '#FFA500' },
+    { name: '黄', value: '黄', hex: '#FFFF00' },
+    { name: '绿', value: '绿', hex: '#008000' },
+    { name: '蓝', value: '蓝', hex: '#0000FF' },
+    { name: '紫', value: '紫', hex: '#800080' },
+    { name: '粉', value: '粉', hex: '#FFC0CB' },
+    { name: '棕', value: '棕', hex: '#A52A2A' },
+    { name: '米', value: '米', hex: '#F5F5DC' },
+];
+
 // --- 生命周期 ---
-onMounted(() => {
-    loadClothesList();
+onShow(() => {
+    // 每次显示页面刷新列表
+    loadClothesList(true);
     fetchTagOptions();
 });
 
-// --- 核心逻辑：添加衣物 ---
+onReachBottom(() => {
+    onScrollToLower();
+});
 
-const addActions = [
-    { name: '拍照', value: 'camera' },
-    { name: '从相册导入', value: 'album' }
-];
+// --- 核心逻辑 ---
 
-/**
- * 1. 处理上传选择
- */
-const onAddSelect = (action: any) => {
-    showAddPopup.value = false;
-
-    uni.chooseImage({
-        count: 1,
-        sizeType: ['compressed'], // 压缩图片提升上传速度 
-        sourceType: [action.value],
-        success: (res: any) => {
-            const tempFilePath = res.tempFilePaths[0];
-            // 调用上传存储接口
-            uploadClothing(tempFilePath);
-        },
-        fail: (err: any) => {
-            console.log('选择图片失败', err);
+// 加载列表
+const loadClothesList = async (reset = false) => {
+    if (reset) {
+        page.value = 1;
+        clothingList.value = [];
+        isFinished.value = false;
+    }
+    
+    if (isFinished.value || isLoading.value) return;
+    
+    isLoading.value = true;
+    
+    try {
+        const params: any = {
+            page: page.value,
+            page_size: pageSize.value,
+            keyword: searchKeyword.value
+        };
+        
+        // 季节筛选
+        if (activeSeason.value !== '全部') {
+            const seasonObj = displaySeasonOptions.value.find((s: any) => s.name === activeSeason.value);
+            if (seasonObj) {
+                params.season_id = seasonObj.id;
+            }
         }
-    });
-};
 
-/**
- * 2. 调用 add 接口进行存储
- * 实现开题报告中 5.2.3.2 上传衣物的功能 
- */
-const uploadClothing = (filePath: string) => {
-    console.log("1. 进入 uploadClothing 函数");
-    console.log("2. 传入的路径为:", filePath);
-    if (!filePath) {
-        console.error("错误：filePath 为空，无法上传");
-        return;
-    }
-
-    const userInfo = uni.getStorageSync('userInfo');
-    const account = userInfo?.account;
-    console.log("3. 获取到的 account 为:", account);
-
-    if (!account) {
-        uni.showToast({ title: '未检测到登录，请先登录', icon: 'none' });
-        return;
-    }
-
-    // 辅助：先尝试按文件大小自适应设置压缩质量并压缩图片，失败时回退为原图
-    const compressImageIfNeeded = (path: string): Promise<string> => {
-        return new Promise((resolve) => {
-            // 默认质量
-            let quality = 70;
-
-            // 如果能获取文件信息，根据大小调整质量
-            if (uni.getFileInfo) {
-                uni.getFileInfo({
-                    filePath: path,
-                    success: (info: any) => {
-                        const sizeKB = (info.size || 0) / 1024;
-                        if (sizeKB > 2000) {
-                            quality = 50; // >2MB 降到 50
-                        } else if (sizeKB > 0) {
-                            quality = 60; // 1-2MB -> 60
-                        } else if (sizeKB > 500) {
-                            quality = 70; // 0.5-1MB -> 70
-                        } else {
-                            quality = 80; // 小文件保留较高质量
-                        }
-
-                        uni.compressImage({
-                            src: path,
-                            quality,
-                            success: (res: any) => {
-                                console.log('图片压缩成功，quality=', quality, ' path=', res.tempFilePath);
-                                resolve(res.tempFilePath || path);
-                            },
-                            fail: (err: any) => {
-                                console.warn('图片压缩失败，使用原图上传', err);
-                                resolve(path);
-                            }
-                        });
-                    },
-                    fail: () => {
-                        // 无法获取文件大小，使用默认质量压缩一次
-                        uni.compressImage({
-                            src: path,
-                            quality,
-                            success: (res: any) => {
-                                console.log('图片压缩成功 (无文件信息)', res.tempFilePath);
-                                resolve(res.tempFilePath || path);
-                            },
-                            fail: (err: any) => {
-                                console.warn('图片压缩失败 (无文件信息)，使用原图上传', err);
-                                resolve(path);
-                            }
-                        });
-                    }
-                });
-            } else {
-                // 平台不支持 getFileInfo，直接压缩一次
-                uni.compressImage({
-                    src: path,
-                    quality,
-                    success: (res: any) => {
-                        console.log('图片压缩成功 (fallback)', res.tempFilePath);
-                        resolve(res.tempFilePath || path);
-                    },
-                    fail: (err: any) => {
-                        console.warn('图片压缩失败 (fallback)，使用原图上传', err);
-                        resolve(path);
-                    }
-                });
-            }
-        });
-    };
-
-    uni.showLoading({ title: '正在录入衣橱...', mask: true });
-
-    // 先压缩再上传
-    compressImageIfNeeded(filePath).then((uploadPath) => {
-        console.log('最终用于上传的图片路径：', uploadPath);
-
-        // 确保 category_id 有效，否则传空字符串，避免后端外键报错
-        const catId = defaultCategoryId.value ? String(defaultCategoryId.value) : '';
-
-        const uploadTask = uni.uploadFile({
-            url: `${API_BASE_URL}/api/clothes/add`,
-            filePath: uploadPath,
-            name: 'image', // 与后端 upload.single('image') 对应
-            formData: {
-                account: account,
-                category_id: catId, // 使用动态获取的有效ID
-                price: '0',
-                season_ids: '', // 可按需传
-                scene_ids: '',
-                remarks: '-'
-            },
-            success: (uploadRes: any) => {
-                console.log('服务器原始响应:', uploadRes);
-                let res;
-                try {
-                    res = JSON.parse(uploadRes.data);
-                } catch (e) {
-                    console.error('后端返回非 JSON：', uploadRes.data);
-                    uni.showToast({ title: '服务器返回异常', icon: 'none' });
-                    return;
-                }
-                if (res.code === 200) {
-                    uni.showToast({ title: '添加成功', icon: 'success' });
-                    loadClothesList && loadClothesList();
-                } else {
-                    console.error('后端返回业务错误:', res);
-                    uni.showToast({ title: '添加失败：' + (res.msg || res.error || '未知错误'), icon: 'none' });
-                }
-            },
-            fail: (err: any) => {
-                console.error('upload fail', err);
-                uni.showToast({ title: '网络或上传失败', icon: 'none' });
-            },
-            complete: () => {
-                console.log('请求 complete');
-                uni.hideLoading();
-            }
-        });
-
-        uploadTask.onProgressUpdate((res: any) => {
-            console.log('上传进度：' + res.progress + '%', res);
-        });
-
-        // 可选：如果需要支持取消上传，保存 uploadTask 并在需要时调用 uploadTask.abort()
-    });
-};
-
-/**
- * 3. 获取衣物列表
- */
-const loadClothesList = () => {
-    const userInfo = uni.getStorageSync('userInfo') || {};
-    const account = userInfo.account;
-    if (!account) {
-        uni.showToast({ title: '未检测到登录，无法获取衣物列表', icon: 'none' });
-        // 仍然使用 mock 数据以便预览
-        mockData();
-        return;
-    }
-
-    // 构建查询参数：后端要求 account 必填，其它按需传入（category_id/scene_id/season_id）
-    const params: any = {
-        account: account
-    };
-
-    // 注意：当前 UI 季节是名字（如“春”），后端期望 season_id（数字）。
-    // 若你有季节的 id 映射表，请在此处传入 season_id。
-    // 示例：params.season_id = selectedSeasonId;
-
-    uni.request({
-        url: `${API_BASE_URL}/api/clothes/list`,
-        method: 'GET',
-        data: params,
-        success: (res: any) => {
-            // 兼容后端返回 { code: 200, data: [...] }
-            if (res.data && res.data.code === 200 && Array.isArray(res.data.data)) {
-                const rows = res.data.data;
-                // 将后端字段映射为前端 ClothingItem 结构
-                clothingList.value = rows.map((r: any) => {
-                    // 取图片字段，兼容 image_url 或 image
-                    const image = r.image_url || r.image || '';
-
-                    // 确定主分类用于分组：如果有多个分类，取第一个；如果没有，归为“其他”
-                    let category = '其他';
-                    if (r.category_names && Array.isArray(r.category_names) && r.category_names.length > 0) {
-                        category = r.category_names[0];
-                    } else if (r.category_name) {
-                        category = r.category_name;
-                    } else if (r.category) {
-                        category = r.category;
-                    }
-
-                    const price = parseFloat(r.price) || 0;
-                    const date = r.created_at ? formatDate(r.created_at) : (r.date || '');
-
-                    // 构建 tags：优先使用后端直接提供的 tags（数组或逗号分隔字符串），
-                    // 同时把 category、scene、season 合并为标签展示，支持多种字段名
-                    const tagColorDefault = '#D3CBC5';
-                    const tagColorCategory = '#A4C2F4';
-
-                    const pushTag = (arr: any[], name: string | undefined, color?: string) => {
-                        if (!name) return;
-                        const trimmed = String(name).trim();
-                        if (!trimmed) return;
-                        // 去重判断
-                        if (!arr.find((t: any) => t.name === trimmed)) {
-                            arr.push({ name: trimmed, color: color || tagColorDefault });
-                        }
-                    };
-
-                    const tagsArr: Tag[] = [];
-
-                    // 1. 处理分类标签 (支持多分类)
-                    // 优先使用 category_names 数组
-                    if (r.category_names && Array.isArray(r.category_names)) {
-                        r.category_names.forEach((c: string) => pushTag(tagsArr, c, tagColorCategory));
-                    } else {
-                        // 降级处理
-                        pushTag(tagsArr, category !== '其他' ? category : '', tagColorCategory);
-                    }
-
-                    // 2. 后端直接返回的 tags 字段处理
-                    if (r.tags) {
-                        if (Array.isArray(r.tags)) {
-                            r.tags.forEach((t: any) => {
-                                if (typeof t === 'string') pushTag(tagsArr, t);
-                                else if (t && t.name) pushTag(tagsArr, t.name, t.color);
-                            });
-                        } else if (typeof r.tags === 'string') {
-                            r.tags.split(',').forEach((t: string) => pushTag(tagsArr, t));
-                        }
-                    }
-
-                    // 支持多种可能的后端字段名来获取场景与季节信息
-                    const sceneFields = ['scene_name', 'scene_names', 'scenes', 'scene'];
-                    for (const f of sceneFields) {
-                        if (r[f]) {
-                            if (Array.isArray(r[f])) r[f].forEach((s: any) => pushTag(tagsArr, s));
-                            else if (typeof r[f] === 'string') r[f].split(',').forEach((s: string) => pushTag(tagsArr, s));
-                        }
-                    }
-
-                    const seasonFields = ['season_name', 'season_names', 'seasons', 'season'];
-                    for (const f of seasonFields) {
-                        if (r[f]) {
-                            if (Array.isArray(r[f])) r[f].forEach((s: any) => pushTag(tagsArr, s));
-                            else if (typeof r[f] === 'string') r[f].split(',').forEach((s: string) => pushTag(tagsArr, s));
-                        }
-                    }
-
-                    return {
-                        id: r.id,
-                        image,
-                        category,
-                        price,
-                        times: r.times || 0,
-                        date,
-                        tags: tagsArr,
-                        costPerTime: r.costPerTime || 0
-                    } as ClothingItem;
-                }).map((it: any) => ({ ...it, id: Number(it.id) })) as ClothingItem[];
-            } else {
-                // 后端返回异常，使用 mock 数据
-                console.warn('获取衣物列表返回格式异常：', res);
-                mockData();
-            }
-        },
-        fail: (err: any) => {
-            console.error('请求衣物列表失败', err);
-            mockData();
+        // 高级筛选
+        if (filterForm.value.category_ids.length > 0) params.category_id = filterForm.value.category_ids.join(',');
+        if (filterForm.value.scene_ids.length > 0) params.scene_id = filterForm.value.scene_ids.join(',');
+        if (filterForm.value.season_ids.length > 0) params.season_id = filterForm.value.season_ids.join(',');
+        if (filterForm.value.color) params.color = filterForm.value.color;
+        
+        // 获取用户信息
+        const userInfo = uni.getStorageSync('userInfo');
+        if (userInfo && userInfo.account) {
+            params.account = userInfo.account;
         }
-    });
+
+        const res = await getClothesList(params) as any;
+        if (res.code === 200) {
+            const list = res.data.list.map((item: any) => {
+                // 处理标签：只展示【场景】标签
+                // 1. 获取场景标签
+                let sceneTags = (item.scene_names || []).map((n: string) => ({ name: n, color: '#fff3e0' }));
+                
+                // 2. 如果没有场景标签，默认展示【通用】
+                // 注意：其他如分类、季节标签不再展示
+                if (sceneTags.length === 0) {
+                    sceneTags = [{ name: '通用', color: '#f5f5f5' }];
+                }
+
+                return {
+                    id: item.id,
+                    name: item.name,
+                    image: item.image_url,
+                    price: item.price,
+                    times: item.wear_count || 0,
+                    date: item.created_at ? item.created_at.split('T')[0] : '',
+                    // 增加默认值0，并强制转换为 Number，防止 toFixed 报错
+                    costPerTime: Number((item.price && item.wear_count) ? (item.price / item.wear_count) : (item.price || 0)),
+                    tags: sceneTags,
+                    category: (item.category_names && item.category_names.length > 0) ? item.category_names[0] : '未分类'
+                };
+            });
+            
+            if (list.length < pageSize.value) {
+                isFinished.value = true;
+            }
+            
+            clothingList.value = [...clothingList.value, ...list];
+            total.value = res.data.total;
+            page.value++;
+        }
+    } catch (e) {
+        console.error(e);
+        uni.showToast({ title: '加载失败', icon: 'none' });
+    } finally {
+        isLoading.value = false;
+    }
 };
 
-// --- UI 交互逻辑 ---
+const onScrollToLower = () => {
+    loadClothesList();
+};
+
+// 分组逻辑
+const clothGroups = computed(() => {
+    const groups: any = {};
+    clothingList.value.forEach((item: any) => {
+        const cat = item.category || '未分类';
+        if (!groups[cat]) {
+            groups[cat] = { category: cat, list: [] };
+        }
+        groups[cat].list.push(item);
+    });
+    return Object.values(groups);
+});
+
+// --- 交互处理 ---
+
 const handleSeasonChange = (name: string) => {
     activeSeason.value = name;
-    loadClothesList();
+    loadClothesList(true);
 };
 
 const toggleLayout = () => {
     isGridLayout.value = !isGridLayout.value;
 };
 
+const openTagManager = () => {
+    uni.navigateTo({ url: '/pages/wardrobe/tag-manager' });
+};
+
+const handleCardTap = (item: any) => {
+    if (isSelectMode.value) {
+        toggleSelectByTap(item.id);
+    } else {
+        uni.navigateTo({ url: `/pages/wardrobe/detail?id=${item.id}` });
+    }
+};
+
+// 选择模式
 const toggleSelectMode = () => {
     isSelectMode.value = !isSelectMode.value;
-    if (!isSelectMode.value) selectedIds.value = [];
+    selectedIds.value = [];
 };
 
-// 切换单项选中状态（保证 id 为数字）
-const onToggleSelect = (idParam: number | string, checked: boolean) => {
-    const id = Number(idParam);
-    if (Number.isNaN(id)) return;
-    const idx = selectedIds.value.indexOf(id);
-    if (checked) {
-        if (idx === -1) selectedIds.value.push(id);
+const toggleSelectByTap = (id: number) => {
+    const index = selectedIds.value.indexOf(id);
+    if (index > -1) {
+        selectedIds.value.splice(index, 1);
     } else {
-        if (idx !== -1) selectedIds.value.splice(idx, 1);
+        selectedIds.value.push(id);
     }
 };
 
-// 点击覆盖层切换选中状态（更友好的交互）
-const toggleSelectByTap = (idParam: number | string) => {
-    const id = Number(idParam);
-    if (Number.isNaN(id)) return;
-    const isSelected = selectedIds.value.includes(id);
-    onToggleSelect(id, !isSelected);
+const bindSelectHandler = (id: number) => {
+    toggleSelectByTap(id);
 };
 
-// 返回一个绑定事件处理器的工厂，避免模板中出现隐式 any 的箭头函数
-const bindSelectHandler = (idParam: number | string) => {
-    return (eventOrValue: any) => {
-        // 兼容多种组件事件/回调签名
-        let checked = false as boolean;
-        if (typeof eventOrValue === 'boolean') {
-            checked = eventOrValue;
-        } else if (eventOrValue && typeof eventOrValue === 'object') {
-            const d = eventOrValue.detail;
-            if (typeof d === 'boolean') checked = d;
-            else if (d && typeof d.checked === 'boolean') checked = d.checked;
-            else if (d && typeof d.value === 'boolean') checked = d.value;
-            else if (Array.isArray(d)) checked = d.includes(idParam);
-            else checked = !selectedIds.value.includes(Number(idParam));
-        } else {
-            checked = !selectedIds.value.includes(Number(idParam));
-        }
-
-        onToggleSelect(idParam, !!checked);
-    };
-};
-
-// 批量删除已选项
+// 批量删除
 const batchDeleteSelected = () => {
-    if (!selectedIds.value || selectedIds.value.length === 0) {
-        uni.showToast({ title: '请先选择要删除的衣物', icon: 'none' });
-        return;
-    }
-
+    if (selectedIds.value.length === 0) return;
+    
     uni.showModal({
         title: '确认删除',
-        content: `确定要删除 ${selectedIds.value.length} 件衣物吗？此操作不可恢复。`,
-        success: (res: any) => {
+        content: `确定要删除选中的 ${selectedIds.value.length} 件衣物吗？`,
+        success: (res) => {
             if (res.confirm) {
-                uni.showLoading({ title: '正在删除...', mask: true });
-                uni.request({
-                    url: `${API_BASE_URL}/api/clothes/batch-delete`,
-                    method: 'POST',
-                    header: { 'content-type': 'application/json' },
-                    data: { ids: selectedIds.value },
-                    success: (resp: any) => {
-                        if (resp.data && resp.data.code === 200) {
-                            uni.showToast({ title: '删除成功', icon: 'success' });
-                            // 刷新列表并清空选中
-                            selectedIds.value = [];
-                            isSelectMode.value = false;
-                            loadClothesList();
-                        } else {
-                            console.error('批量删除失败：', resp);
-                            uni.showToast({ title: '删除失败：' + (resp.data?.msg || '未知错误'), icon: 'none' });
-                        }
-                    },
-                    fail: (err: any) => {
-                        console.error('请求失败：', err);
-                        uni.showToast({ title: '网络或服务异常，删除失败', icon: 'none' });
-                    },
-                    complete: () => {
-                        uni.hideLoading();
+                batchDeleteClothes(selectedIds.value).then((res: any) => {
+                    if (res.code === 200) {
+                        uni.showToast({ title: '删除成功' });
+                        isSelectMode.value = false;
+                        loadClothesList(true);
                     }
                 });
             }
@@ -668,812 +522,720 @@ const batchDeleteSelected = () => {
     });
 };
 
-// 打开批量添加标签弹窗
+// 批量标签
 const openTagPopup = () => {
     if (selectedIds.value.length === 0) {
         uni.showToast({ title: '请先选择衣物', icon: 'none' });
         return;
     }
-    resetTagSelection();
-    showTagPopup.value = true;
-
-};
-
-// 切换标签选项选中状态
-const toggleSelectOption = (type: 'season' | 'category' | 'scene', idParam: number | string) => {
-    const id = Number(idParam);
-    if (Number.isNaN(id)) return;
-
-    let target: any;
-    if (type === 'season') target = selectedSeasonIds;
-    else if (type === 'category') target = selectedCategoryIds;
-    else if (type === 'scene') target = selectedSceneIds;
-
-    if (!target) return;
-
-    const idx = target.value.indexOf(id);
-    if (idx > -1) {
-        target.value.splice(idx, 1);
-    } else {
-        target.value.push(id);
-    }
-};
-
-// 获取标签选项数据
-const fetchTagOptions = () => {
-    // 获取季节
-    uni.request({
-        url: `${API_BASE_URL}/api/clothes/seasons`,
-        method: 'GET',
-        success: (res: any) => {
-            if (res.data && res.data.code === 200) {
-                seasonOptions.value = res.data.data;
-                console.log('获取到季节选项:', seasonOptions.value);
-            }
-        }
-    });
-    // 获取种类
-    uni.request({
-        url: `${API_BASE_URL}/api/clothes/categories`,
-        method: 'GET',
-        success: (res: any) => {
-            if (res.data && res.data.code === 200) {
-                categoryOptions.value = res.data.data;
-                console.log('获取到分类选项:', categoryOptions.value);
-                // 初始化默认分类ID（取第一个），防止上传时硬编码 ID 导致外键错误
-                if (categoryOptions.value.length > 0) {
-                    defaultCategoryId.value = categoryOptions.value[0].id;
-                }
-            }
-        }
-    });
-    // 获取场景
-    uni.request({
-        url: `${API_BASE_URL}/api/clothes/scenes`,
-        method: 'GET',
-        success: (res: any) => {
-            if (res.data && res.data.code === 200) {
-                sceneOptions.value = res.data.data;
-                console.log('获取到场景选项:', sceneOptions.value);
-            }
-        }
-    });
-};
-
-// 模拟数据（用于接口未通时的预览）
-const mockData = () => {
-    clothingList.value = [
-        {
-            id: 1,
-            image: 'https://img.alicdn.com/imgextra/i4/2206615431331/O1CN01f5v7p41ZzN3Z3X7Z3_!!2206615431331.jpg',
-            category: '上衣',
-            price: 299,
-            times: 12,
-            date: '2025-12-20',
-            tags: [{ name: '职场', color: '#A4C2F4' }, { name: '羊毛', color: '#D3CBC5' }],
-            costPerTime: 24.9
-        }
-    ];
-};
-
-// 辅助：将 ISO 字符串或时间戳格式化为 YYYY-MM-DD
-const formatDate = (raw: string | number) => {
-    try {
-        const d = new Date(raw);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-    } catch (e) {
-        return String(raw);
-    }
-};
-
-const submitBatchAddTags = () => {
-    // 校验：根据接口要求，scene_ids、season_ids、category_ids 至少需要传一个
-    const hasSeason = selectedSeasonIds.value && selectedSeasonIds.value.length > 0;
-    const hasScene = selectedSceneIds.value && selectedSceneIds.value.length > 0;
-    const hasCategory = selectedCategoryIds.value && selectedCategoryIds.value.length > 0;
-
-    if (!hasSeason && !hasScene && !hasCategory) {
-        uni.showToast({ title: '请至少选择一种标签', icon: 'none' });
-        return;
-    }
-
-    // 使用解构确保传递的是纯数组
-    const body: any = { ids: [...selectedIds.value] };
-    if (hasScene) body.scene_ids = [...selectedSceneIds.value];
-    if (hasSeason) body.season_ids = [...selectedSeasonIds.value];
-    // 支持传入 category_ids
-    if (hasCategory) body.category_ids = [...selectedCategoryIds.value];
-
-    console.log('批量添加标签请求体:', body);
-
-    uni.showLoading({ title: '正在添加标签...', mask: true });
-    uni.request({
-        url: `${API_BASE_URL}/api/clothes/batch-add-tags`,
-        method: 'POST',
-        header: { 'content-type': 'application/json' },
-        data: body,
-        success: (res: any) => {
-            if (res.data && res.data.code === 200) {
-                uni.showToast({ title: '标签添加成功', icon: 'success' });
-                showTagPopup.value = false;
-                // 清空选中并退出选择模式
-                selectedIds.value = [];
-                isSelectMode.value = false;
-                // 刷新列表
-                loadClothesList();
-            } else {
-                console.error('批量添加标签失败：', res);
-                uni.showToast({ title: '添加失败：' + (res.data?.msg || '未知错误'), icon: 'none' });
-            }
-        },
-        fail: (err: any) => {
-            console.error('请求失败：', err);
-            uni.showToast({ title: '网络或服务异常，添加失败', icon: 'none' });
-        },
-        complete: () => {
-            uni.hideLoading();
-        }
-    });
-};
-
-// 重置弹窗中已选的标签（不关闭弹窗）
-const resetTagSelection = () => {
     selectedSeasonIds.value = [];
-    selectedSceneIds.value = [];
     selectedCategoryIds.value = [];
+    selectedSceneIds.value = [];
+    showTagPopup.value = true;
 };
+
+const fetchTagOptions = () => {
+    Promise.all([getCategories(), getScenes(), getSeasons()]).then(([resCat, resScene, resSeason]: any[]) => {
+        displayCategoryOptions.value = resCat.data || [];
+        displaySceneOptions.value = resScene.data || [];
+        displaySeasonOptions.value = resSeason.data || [];
+    });
+};
+
+const toggleSelectOption = (type: string, id: number) => {
+    let target: any[];
+    if (type === 'season') target = selectedSeasonIds.value;
+    else if (type === 'category') target = selectedCategoryIds.value;
+    else target = selectedSceneIds.value;
+    
+    const idx = target.indexOf(id);
+    if (idx > -1) target.splice(idx, 1);
+    else target.push(id);
+};
+
+const submitBatchTags = () => {
+    const data = {
+        ids: selectedIds.value,
+        category_ids: selectedCategoryIds.value,
+        scene_ids: selectedSceneIds.value,
+        season_ids: selectedSeasonIds.value
+    };
+    
+    batchAddTags(data).then((res: any) => {
+        if (res.code === 200) {
+            uni.showToast({ title: '添加成功' });
+            showTagPopup.value = false;
+            isSelectMode.value = false;
+            loadClothesList(true);
+        }
+    });
+};
+
+// 添加菜单
+const onAddSelect = (e: any) => {
+    if (e.detail.name === 'DIY搭配') {
+        uni.navigateTo({ url: '/pages/outfit/create' });
+    } else {
+        let sourceType: 'camera' | 'album' = 'album';
+        if (e.detail.name === '拍照录入') {
+            sourceType = 'camera';
+        } else if (e.detail.name === '相册导入') {
+            sourceType = 'album';
+        }
+        handleUpload(sourceType);
+    }
+    showAddPopup.value = false;
+};
+
+// 处理上传逻辑
+const handleUpload = (sourceType: 'camera' | 'album') => {
+    uni.chooseImage({
+        count: 1,
+        sizeType: ['original', 'compressed'],
+        sourceType: [sourceType],
+        success: (res) => {
+            const tempFilePath = res.tempFilePaths[0];
+            doUpload(tempFilePath);
+        },
+        fail: (err) => {
+            console.log('选择图片取消或失败', err);
+        }
+    });
+};
+
+const doUpload = (filePath: string) => {
+    uni.showLoading({ title: '正在入库...', mask: true });
+    uploadClothes(filePath).then((res: any) => {
+        uni.hideLoading();
+        if (res.code === 200) {
+            uni.showToast({ title: '录入成功', icon: 'success' });
+            // 上传成功后（假设后端返回了新创建的 ID），跳转到详情页进行编辑完善
+            // 假设回包结构是 res.data.id 或者 res.data 就是 id，根据 api/clothes.ts 里的解析
+            const newId = res.data.id || res.data; 
+            
+            // 延迟一点跳转，让用户看到成功提示
+            setTimeout(() => {
+                uni.navigateTo({ 
+                    url: `/pages/wardrobe/detail?id=${newId}&edit=true`
+                });
+            }, 800);
+            
+            // 刷新列表以便返回时能看到
+            loadClothesList(true);
+        } else {
+            uni.showToast({ title: res.message || '上传失败', icon: 'none' });
+        }
+    }).catch((err) => {
+        uni.hideLoading();
+        uni.showToast({ title: '网络异常，请重试', icon: 'none' });
+        console.error('Upload Error:', err);
+    });
+};
+
+// 筛选标签（暂未实现逻辑）
+const removeFilterTag = (tag: any) => {
+    if (tag.type === 'category') {
+        const idx = filterForm.value.category_ids.indexOf(tag.id);
+        if (idx > -1) filterForm.value.category_ids.splice(idx, 1);
+    } else if (tag.type === 'scene') {
+        const idx = filterForm.value.scene_ids.indexOf(tag.id);
+        if (idx > -1) filterForm.value.scene_ids.splice(idx, 1);
+    } else if (tag.type === 'season') {
+        const idx = filterForm.value.season_ids.indexOf(tag.id);
+        if (idx > -1) filterForm.value.season_ids.splice(idx, 1);
+    } else if (tag.type === 'color') {
+        filterForm.value.color = '';
+    }
+    applyFilter();
+};
+
+const toggleFilterOption = (type: string, id: number) => {
+    let target: number[];
+    if (type === 'category') target = filterForm.value.category_ids;
+    else if (type === 'scene') target = filterForm.value.scene_ids;
+    else target = filterForm.value.season_ids;
+
+    const idx = target.indexOf(id);
+    if (idx > -1) target.splice(idx, 1);
+    else target.push(id);
+};
+
+const resetFilter = () => {
+    filterForm.value = {
+        category_ids: [],
+        scene_ids: [],
+        season_ids: [],
+        color: ''
+    };
+    activeFilterTags.value = [];
+    loadClothesList(true);
+};
+
+const applyFilter = () => {
+    showFilter.value = false;
+    
+    // 更新显示的筛选标签
+    const tags: any[] = [];
+    
+    filterForm.value.category_ids.forEach((id: number) => {
+        const item = displayCategoryOptions.value.find((c: any) => c.id === id);
+        if (item) tags.push({ type: 'category', id: id, name: item.name });
+    });
+    
+    filterForm.value.scene_ids.forEach((id: number) => {
+        const item = displaySceneOptions.value.find((s: any) => s.id === id);
+        if (item) tags.push({ type: 'scene', id: id, name: item.name });
+    });
+    
+    filterForm.value.season_ids.forEach((id: number) => {
+        const item = displaySeasonOptions.value.find((s: any) => s.id === id);
+        if (item) tags.push({ type: 'season', id: id, name: item.name });
+    });
+    
+    if (filterForm.value.color) {
+        tags.push({ type: 'color', id: 0, name: filterForm.value.color });
+    }
+    
+    activeFilterTags.value = tags;
+    loadClothesList(true);
+};
+
 </script>
 
 <style lang="scss" scoped>
-$bg: #F8F9FA;
-$morandi-blue: #A4C2F4;
-$text-main: #333;
-$text-grey: #999;
-$shadow: 0 4px 12rpx rgba(0, 0, 0, 0.05);
-
 .wardrobe-page {
-    background-color: $bg;
     min-height: 100vh;
-    padding: 0 24rpx;
+    background-color: #f7f8fa;
+    padding-bottom: 120rpx;
+}
 
-    .sticky-header {
-        position: sticky;
-        top: 0;
-        z-index: 100;
-        background: $bg;
-        padding: 12rpx 0 20rpx; // 顶部增加一点呼吸感
+.sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background-color: #fff;
+    padding-bottom: 10rpx;
+}
 
-        .top-tool-row {
+.top-tool-row {
+    display: flex;
+    align-items: center;
+    padding: 10rpx 20rpx;
+    
+    .search-box {
+        flex: 1;
+    }
+    
+    .season-scroll {
+        width: 300rpx;
+        margin: 0 20rpx;
+        white-space: nowrap;
+        
+        .season-wrap {
             display: flex;
             align-items: center;
-            gap: 20rpx; // 增加间距
+        }
+        
+        .season-item {
+            display: inline-flex;
+            /* 移除 flex-direction: column，改为默认 row 或在 item-content 中控制 */
+            align-items: center;
+            margin-right: 12rpx; /*稍微减小间距*/
+            opacity: 0.8; /*调整默认透明度*/
+            transition: all 0.3s;
+            
+            &.active {
+                opacity: 1;
+                /* 选中时不放大整体，避免布局跳动过大 */
+                /* transform: scale(1.1); */
+            }
+            
+            .item-content {
+                display: flex;
+                flex-direction: row; /* 关键：改为水平排列 */
+                align-items: center;
+                background-color: transparent;
+                border-radius: 30rpx;
+                padding: 4rpx;
+                transition: all 0.3s;
 
-            .search-box {
-                flex: 1;
-                min-width: 0;
-
-                .custom-search {
-                    padding: 0;
-                    font-size: 28rpx;
-
-                    :deep(.van-search__content) {
-                        background-color: #fff;
-                        box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04); // 更细腻的阴影
-                        height: 76rpx; // 再次微调高度
-                        display: flex;
-                        align-items: center;
-                        border-radius: 38rpx;
-                        padding-left: 16rpx;
-                    }
-
-                    :deep(.van-search) {
-                        padding: 0;
-                    }
-
-                    // 调整输入框内部样式
-                    :deep(.van-field__input) {
-                        font-size: 26rpx;
-                        color: #333;
-                    }
-                }
+                /* 选中态样式优化：给整个胶囊加个背景色可能更好看，但目前先保持文字同行的需求 */
             }
 
-            .season-scroll {
-                width: 240rpx; // 调整宽度
-                flex-shrink: 0;
-
-                // 隐藏滚动条
-                &::-webkit-scrollbar {
-                    display: none;
-                    width: 0 !important;
-                    height: 0 !important;
-                    -webkit-appearance: none;
-                    background: transparent;
-                }
-
-                .season-wrap {
-                    display: flex;
-                    align-items: center;
-                    padding: 4rpx 0;
-
-                    .season-item {
-                        flex-shrink: 0;
-                        margin-right: 12rpx;
-                        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-
-                        .item-content {
-                            display: flex;
-                            align-items: center;
-                            padding: 6rpx;
-                            border-radius: 32rpx;
-                            transition: all 0.3s;
-                            border: 1px solid transparent; // 预留边框位防止抖动
-                        }
-
-                        .icon-box {
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            width: 56rpx;
-                            height: 56rpx;
-                            border-radius: 50%;
-                            // background-color 由内联样式控制
-                        }
-
-                        .s-text {
-                            font-size: 0;
-                            width: 0;
-                            opacity: 0;
-                            margin-left: 0;
-                            overflow: hidden;
-                            transition: all 0.3s ease;
-                            white-space: nowrap;
-                        }
-
-                        &.active {
-                            .item-content {
-                                background: #fff;
-                                padding-right: 24rpx; // 增加右侧内边距
-                                box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
-                            }
-
-                            .s-text {
-                                font-size: 24rpx; // 稍微加大选中文字
-                                width: auto;
-                                opacity: 1;
-                                margin-left: 10rpx;
-                                font-weight: 600;
-                                color: #333;
-                            }
-                        }
-                    }
-                }
-            }
-
-            .layout-toggle {
-                flex-shrink: 0;
-                width: 76rpx; // 与搜索框高度一致
-                height: 76rpx;
-                background: #fff;
+            .icon-box {
+                width: 50rpx; /* 稍微调小一点 */
+                height: 50rpx;
                 border-radius: 50%;
-                box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: transform 0.2s;
-
-                &:active {
-                    transform: scale(0.95);
-                }
+                /* margin-bottom removed */
             }
-        }
-    }
-
-    .filter-action-bar {
-        position: relative;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 10rpx 0 30rpx; // 调整垂直间距
-        height: 88rpx;
-
-        .left-tools {
-            position: relative;
-            z-index: 2;
-            display: flex;
-            align-items: center;
-            background: #fff;
-            padding: 14rpx 28rpx; // 加大点击区域
-            border-radius: 40rpx;
-            box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.03);
-            font-size: 26rpx;
-            font-weight: 500;
-            color: #333;
-
-            .filter-text {
-                margin-left: 10rpx;
-            }
-
-            .filter-dot {
-                width: 10rpx;
-                height: 10rpx;
-                background: $morandi-blue;
-                border-radius: 50%;
-                margin-left: 8rpx;
-            }
-        }
-
-        .center-status {
-            position: absolute;
-            left: 0;
-            right: 0;
-            top: 0;
-            bottom: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1;
-            pointer-events: none; // 防止遮挡点击
-
-            .status-tag {
-                font-size: 22rpx;
-                color: #bbb;
-                letter-spacing: 2rpx;
-                background: rgba(255, 255, 255, 0.6); // 增加一点背景防止文字重叠
-                padding: 4rpx 12rpx;
-                border-radius: 8rpx;
-            }
-        }
-
-        .right-tools {
-            position: relative;
-            z-index: 2;
-            display: flex;
-            align-items: center;
-
-            .select-trigger {
-                font-size: 26rpx;
-                font-weight: 500;
+            
+            .s-text {
+                font-size: 26rpx; /* 字体加大 */
                 color: #333;
-                padding: 14rpx 32rpx;
-                border-radius: 40rpx;
-                background: #fff;
-                box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.03);
-                transition: all 0.3s;
-
-                &.editing {
-                    background: #222;
-                    color: #fff;
-                    box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.15);
-                }
+                margin-left: 10rpx; /* 文字和图标的间距 */
+                font-weight: 500;
             }
         }
     }
+    
+    .layout-toggle {
+        padding: 10rpx;
+    }
+}
 
-    .group-section {
-        margin-bottom: 30rpx;
-
-        .group-title {
+.filter-action-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20rpx 30rpx;
+    background-color: #fff;
+    border-bottom: 1rpx solid #eee;
+    
+    .left-tools {
+        display: flex;
+        align-items: center;
+        font-size: 28rpx;
+        color: #333;
+        .filter-text { margin-left: 8rpx; }
+    }
+    
+    .center-status {
+        flex: 1;
+        text-align: center;
+        font-size: 28rpx;
+        color: #666;
+        font-weight: bold;
+    }
+    
+    .right-tools {
+        .select-trigger {
             font-size: 28rpx;
-            font-weight: bold;
-            margin: 20rpx 0;
-            display: flex;
-            align-items: center;
-
-            .num {
-                font-size: 20rpx;
-                color: #fff;
-                background: #D1D1D1;
-                padding: 2rpx 14rpx;
-                border-radius: 20rpx;
-                margin-left: 12rpx;
-            }
+            color: #1989fa;
+            &.editing { color: #ee0a24; }
         }
     }
+}
 
-    .grid-container {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 20rpx;
+.main-list {
+    height: calc(100vh - 200rpx);
+    padding: 20rpx;
+    box-sizing: border-box;
+}
 
-        .cloth-card-grid {
-            background: #fff;
-            border-radius: 24rpx; // 更大的圆角
-            padding: 16rpx; // 增加内边距
-            box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04); // 更柔和的阴影
-            display: flex;
-            flex-direction: column;
-            transition: all 0.3s;
+.group-section {
+    margin-bottom: 30rpx;
+    
+    .group-title {
+        font-size: 30rpx;
+        font-weight: bold;
+        margin-bottom: 20rpx;
+        padding-left: 10rpx;
+        color: #333;
+        
+        .num {
+            font-size: 24rpx;
+            color: #999;
+            margin-left: 10rpx;
+            font-weight: normal;
+        }
+    }
+}
 
-            .img-wrapper {
-                position: relative;
+.grid-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12rpx; /* 缩小间隙以适应三列 */
+    padding: 0 4rpx; /* 微调左右留白 */
+    
+    .cloth-card-grid {
+        width: calc((100% - 24rpx) / 3); /* 3列布局精确计算：(100% - 2个间隙) / 3 */
+        background: #fff;
+        border-radius: 12rpx;
+        overflow: hidden;
+        padding-bottom: 12rpx;
+        box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.02); /* 轻微阴影增加层次感 */
+        
+        .img-wrapper {
+            position: relative;
+            width: 100%;
+            height: 220rpx; /* 缩小图片高度适配三列 */
+            background-color: #f9f9f9;
+            
+            .cloth-img {
                 width: 100%;
-                // 使用 padding-bottom hack 实现 1:1 正方形图片区域
-                padding-bottom: 100%;
-                height: 0;
-                border-radius: 20rpx; // 图片圆角跟随卡片
-                overflow: hidden;
-                background-color: #f7f8fa; // 图片加载前的占位色
-
-                .cloth-img {
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    // 确保图片填充
-                }
-
-                .check-overlay {
-                    position: absolute;
-                    top: 8rpx;
-                    right: 8rpx;
-                    z-index: 2;
-                }
-
-                // 优化选中遮罩样式
-                .select-mask {
-                    position: absolute;
-                    left: 0;
-                    top: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0, 0, 0, 0.05); // 更淡的遮罩
-                    z-index: 1;
-                    display: flex;
-                    align-items: flex-start;
-                    justify-content: flex-end;
-                    padding: 8rpx;
-                    border-radius: 16rpx;
-                }
-
+                height: 100%;
+                will-change: transform; /* 优化渲染 */
+            }
+            
+            .select-mask {
+                position: absolute;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.1);
+                z-index: 10;
+                
                 .select-icon {
-                    width: 44rpx;
-                    height: 44rpx;
-                    border-radius: 50%;
-                    border: 2rpx solid rgba(255, 255, 255, 0.6);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    background: rgba(255, 255, 255, 0.1);
-                }
-
-                .select-icon.checked {
-                    background: rgba(164, 194, 244, 0.95);
-                    border-color: rgba(164, 194, 244, 0.95);
-                }
-            }
-
-            .tag-row {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 8rpx;
-                margin-top: 16rpx;
-                min-height: 32rpx; // 保持最小高度防止抖动
-
-                .mini-tag {
-                    font-size: 22rpx; // 增大字号提高可读性
-                    padding: 6rpx 12rpx;
-                    border-radius: 8rpx;
-                    color: #fff;
-                    line-height: 1.2;
-                }
-            }
-        }
-    }
-
-    .list-container {
-        .cloth-card-list {
-            display: flex;
-            background: #fff;
-            border-radius: 24rpx;
-            padding: 20rpx; // 稍微减小内边距
-            margin-bottom: 20rpx;
-            box-shadow: $shadow;
-            transition: transform 0.1s;
-
-            &:active {
-                transform: scale(0.99);
-            }
-
-            .list-img-box {
-                position: relative;
-                flex-shrink: 0; // 防止图片被压缩
-
-                .cloth-img-l {
-                    width: 180rpx; // 稍微加大图片
-                    height: 180rpx;
-                    border-radius: 16rpx;
-                    background-color: #f5f5f5;
-                }
-
-                .select-mask {
                     position: absolute;
-                    left: 0;
-                    top: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0, 0, 0, 0.1);
-                    z-index: 1;
-                    border-radius: 16rpx;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                }
-
-                .select-icon {
-                    width: 48rpx;
-                    height: 48rpx;
+                    top: 8rpx; right: 8rpx;
+                    width: 32rpx; height: 32rpx;
                     border-radius: 50%;
-                    background: rgba(255, 255, 255, 0.9);
+                    border: 2rpx solid #fff;
+                    background: rgba(0,0,0,0.3);
                     display: flex;
                     align-items: center;
                     justify-content: center;
-
+                    
                     &.checked {
-                        background: $morandi-blue;
-                        color: #fff;
+                        background: #1989fa;
+                        border-color: #1989fa;
                     }
-                }
-
-                .check-overlay-l {
-                    display: none; // 隐藏旧的 checkbox，使用自定义样式
+                    
+                    /* 适配 van-icon 大小 */
+                    :deep(.van-icon) {
+                        font-size: 12px; 
+                    }
                 }
             }
+            
+            .check-overlay {
+                position: absolute;
+                bottom: 8rpx;
+                right: 8rpx;
+                z-index: 11;
+            }
+        }
+        
+        .name-row {
+            font-size: 24rpx; /* 缩小字体 */
+            color: #333;
+            padding: 12rpx 10rpx 4rpx; /* 调整内边距 */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center; /* 三列通常居中对齐更好看 */
+        }
+        
+        .tag-row {
+            padding: 4rpx 10rpx;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6rpx;
+            justify-content: center; /* 标签居中 */
+            height: 36rpx; /* 固定高度防止卡片参差不齐 */
+            overflow: hidden;
+            
+            .mini-tag {
+                font-size: 18rpx; /* 极小字体 */
+                padding: 2rpx 6rpx;
+                border-radius: 4rpx;
+                color: #666;
+                background-color: #f0f0f0;
+                max-width: 100%;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+        }
+    }
+}
 
-            .cloth-details {
-                flex: 1;
-                margin-left: 24rpx;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-                padding: 4rpx 0;
-
-                .price-row {
-                    display: flex;
-                    align-items: baseline; // 基线对齐
-                    justify-content: space-between;
-
-                    .cost-per {
-                        font-size: 32rpx; // 加大主要数字
-                        font-weight: 600;
-                        color: $text-main;
-
-                        .currency {
-                            font-size: 22rpx;
-                            margin-right: 2rpx;
-                        }
-
-                        .unit {
-                            font-size: 22rpx;
-                            color: $text-grey;
-                            font-weight: normal;
-                            margin-left: 4rpx;
-                        }
-                    }
-
-                    .item-price {
-                        font-size: 22rpx;
-                        color: #ccc;
-                        text-decoration: line-through;
-                    }
-                }
-
-                .info-row {
-                    font-size: 22rpx;
-                    color: $text-grey;
-                    margin-top: 8rpx;
+.list-container {
+    .cloth-card-list {
+        display: flex;
+        background: #fff;
+        padding: 20rpx;
+        border-radius: 16rpx;
+        margin-bottom: 20rpx;
+        
+        .list-img-box {
+            position: relative;
+            width: 160rpx;
+            height: 160rpx;
+            margin-right: 20rpx;
+            border-radius: 8rpx;
+            overflow: hidden;
+            
+            .cloth-img-l {
+                width: 100%;
+                height: 100%;
+            }
+            
+            .select-mask {
+                position: absolute;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.1);
+                z-index: 10;
+                
+                .select-icon {
+                    position: absolute;
+                    top: 8rpx; right: 8rpx;
+                    width: 36rpx; height: 36rpx;
+                    border-radius: 50%;
+                    border: 2rpx solid #fff;
+                    background: rgba(0,0,0,0.3);
                     display: flex;
                     align-items: center;
-                    gap: 12rpx;
-
-                    .divider {
-                        width: 1px;
-                        height: 16rpx;
-                        background: #eee;
-                    }
-                }
-
-                .tag-row-l {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 12rpx;
-                    margin-top: auto; // 推到底部
-
-                    .tag-label {
-                        font-size: 20rpx;
-                        padding: 4rpx 12rpx;
-                        border-radius: 8rpx;
-                        background: #f7f8fa; // 增加浅色背景
-                        border: none; // 移除边框，改用背景色
-                        color: #666 !important; // 强制深灰色文字
+                    justify-content: center;
+                    
+                    &.checked {
+                        background: #1989fa;
+                        border-color: #1989fa;
                     }
                 }
             }
         }
-    }
-
-    .fab-add {
-        position: fixed;
-        right: 40rpx;
-        bottom: 100rpx;
-        width: 100rpx;
-        height: 100rpx;
-        background: $morandi-blue;
-        border-radius: 50%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        box-shadow: 0 10rpx 30rpx rgba($morandi-blue, 0.4);
-        z-index: 10;
-    }
-
-    .batch-bar {
-        position: fixed;
-        bottom: 40rpx;
-        left: 30rpx;
-        right: 30rpx;
-        height: 110rpx;
-        background: rgba(51, 51, 51, 0.95);
-        color: #fff;
-        border-radius: 55rpx;
-        display: flex;
-        align-items: center;
-        backdrop-filter: blur(10px);
-        z-index: 100;
-
-        .batch-btn {
+        
+        .cloth-details {
             flex: 1;
             display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 12rpx;
-            font-size: 26rpx;
-
-            &.del {
-                border-right: 1px solid #555;
+            flex-direction: column;
+            justify-content: space-between;
+            
+            .list-header {
+                display: flex;
+                justify-content: space-between;
+                .item-name { font-size: 30rpx; font-weight: bold; color: #333; }
+            }
+            
+            .price-row {
+                display: flex;
+                align-items: baseline;
+                gap: 16rpx;
+                .cost-per { font-size: 24rpx; color: #ff976a; }
+                .item-price { font-size: 24rpx; color: #999; text-decoration: line-through; }
+            }
+            
+            .info-row {
+                font-size: 22rpx;
+                color: #999;
+            }
+            
+            .tag-row-l {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10rpx;
+                .tag-label {
+                    font-size: 20rpx;
+                    padding: 2rpx 8rpx;
+                    border: 1rpx solid #eee;
+                    border-radius: 4rpx;
+                }
             }
         }
-
-        .batch-info {
-            color: #fff;
-            padding: 0 24rpx;
-            font-size: 26rpx;
-        }
     }
+}
 
-    .transition-fade {
-        animation: fadeIn 0.4s ease;
-    }
-
-    @keyframes fadeIn {
-        from {
-            opacity: 0;
-            transform: translateY(10rpx);
-        }
-
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-
-    .animate-slide-up {
-        animation: slideUp 0.3s ease-out;
-    }
-
-    @keyframes slideUp {
-        from {
-            transform: translateY(120rpx);
-        }
-
-        to {
-            transform: translateY(0);
-        }
-    }
-
-    .safe-area-bottom {
-        height: 180rpx;
-    }
-
-    /* 弹窗卡片样式（居中） */
-    .tag-popup-card {
-        justify-content: center;
-        align-items: center;
-        position: absolute;
-        left: 0;
-        top: 0;
-        z-index: 120;
-        width: 100vw;
-        height: 100vh;
-        background-color: rgba(0, 0, 0, 0.4);
-        border-radius: 20rpx;
-        overflow: hidden;
-    }
-
-    .card-inner {
-        padding: 28rpx;
-        border-radius: 16rpx;
-        background: #fff;
-        box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.1);
-        margin: 35% 10% 0;
-    }
-
-    .card-title {
-        font-size: 30rpx;
-        font-weight: 600;
-        color: #222;
-        margin-bottom: 18rpx;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-
-        .close-btn {
-            font-size: 26rpx;
-            color: #999;
-            font-weight: normal;
-            padding: 0 10rpx;
-        }
-    }
-
-    .card-section {
-        margin-bottom: 14rpx;
-    }
-
-    .card-section-title {
-        font-size: 24rpx;
-        color: #666;
-        margin-bottom: 10rpx;
-    }
-
-    .options-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12rpx;
-    }
-
-    .opt-item {
-        padding: 8rpx 20rpx;
-        border-radius: 18rpx;
-        border: 1rpx solid #E6E6E6;
-        background: #fff;
-        color: #333;
-        font-size: 24rpx;
-    }
-
-    .opt-item.active {
-        background: $morandi-blue;
-        color: #fff;
-        border-color: $morandi-blue;
-    }
-
-    .card-actions {
-        display: flex;
-        gap: 20rpx;
-        margin-top: 20rpx;
-    }
-
-    .card-actions .btn {
+.batch-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 100rpx;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    padding: 0 30rpx;
+    box-shadow: 0 -2rpx 10rpx rgba(0,0,0,0.05);
+    z-index: 200;
+    padding-bottom: env(safe-area-inset-bottom);
+    
+    .batch-info {
         flex: 1;
-        height: 72rpx;
-        border-radius: 36rpx;
+        font-size: 28rpx;
+        color: #333;
+    }
+    
+    .batch-btn {
         display: flex;
         align-items: center;
-        justify-content: center;
+        margin-left: 30rpx;
         font-size: 28rpx;
+        
+        &.del { color: #ee0a24; }
+        &.tag { color: #1989fa; }
+        
+        text { margin-left: 8rpx; }
+    }
+}
+
+.fab-add {
+    position: fixed;
+    right: 40rpx;
+    bottom: 140rpx;
+    width: 100rpx;
+    height: 100rpx;
+    background: #1989fa;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4rpx 16rpx rgba(25, 137, 250, 0.4);
+    z-index: 90;
+}
+
+.tag-popup-card {
+    .card-inner {
+        width: 600rpx;
+        background: #fff;
+        border-radius: 16rpx;
+        padding: 30rpx;
+        
+        .card-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 32rpx;
+            font-weight: bold;
+            margin-bottom: 30rpx;
+            
+            .close-btn {
+                font-size: 28rpx;
+                color: #999;
+                font-weight: normal;
+            }
+        }
+        
+        .card-section {
+            margin-bottom: 30rpx;
+            .card-section-title {
+                font-size: 28rpx;
+                color: #666;
+                margin-bottom: 16rpx;
+                display: block;
+            }
+            
+            .options-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 16rpx;
+                
+                .opt-item {
+                    padding: 10rpx 24rpx;
+                    background: #f5f5f5;
+                    border-radius: 30rpx;
+                    font-size: 24rpx;
+                    color: #333;
+                    
+                    &.active {
+                        background: #e3f2fd;
+                        color: #1989fa;
+                    }
+                }
+            }
+        }
+        
+        .confirm-btn {
+            width: 100%;
+            height: 80rpx;
+            background: #1989fa;
+            color: #fff;
+            border-radius: 40rpx;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30rpx;
+            margin-top: 20rpx;
+        }
+    }
+}
+
+.filter-drawer {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #fff;
+
+    .drawer-title {
+        padding: 44px 16px 16px;
+        font-size: 18px;
+        font-weight: 600;
+        border-bottom: 1px solid #eee;
     }
 
-    .card-actions .btn.reset {
-        background: #F0F0F0;
-        color: #666;
+    .drawer-content {
+        flex: 1;
+        padding: 16px;
+        overflow-y: auto;
+
+        .filter-section {
+            margin-bottom: 24px;
+
+            .section-header {
+                font-size: 15px;
+                font-weight: 500;
+                margin-bottom: 12px;
+                color: #333;
+            }
+
+            .tags-grid {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+
+                .filter-tag {
+                    padding: 6px 16px;
+                    background: #f5f5f5;
+                    border-radius: 4px;
+                    font-size: 13px;
+                    color: #666;
+
+                    &.active {
+                        background: #e8f0fe;
+                        color: #1989fa;
+                    }
+                }
+            }
+
+            .colors-grid {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 16px;
+
+                .color-item {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 6px;
+
+                    .color-circle {
+                        width: 32px;
+                        height: 32px;
+                        border-radius: 50%;
+                        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                    }
+
+                    .color-name {
+                        font-size: 12px;
+                        color: #666;
+                    }
+
+                    &.active {
+                        .color-circle {
+                            transform: scale(1.1);
+                            border: 2px solid #1989fa;
+                        }
+                        .color-name {
+                            color: #1989fa;
+                            font-weight: 500;
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    .card-actions .btn.confirm {
-        background: $morandi-blue;
-        color: #fff;
+    .drawer-actions {
+        padding: 16px;
+        border-top: 1px solid #eee;
+        display: flex;
+        gap: 12px;
+        padding-bottom: calc(16px + env(safe-area-inset-bottom));
+
+        .action-btn {
+            flex: 1;
+        }
     }
 }
 </style>

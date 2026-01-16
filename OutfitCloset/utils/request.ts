@@ -4,7 +4,7 @@
 
 // utils/request.ts
 
-const BASE_URL = 'http://localhost:3000/api'; // 统一管理后端地址
+export const BASE_URL = 'http://localhost:3000/api'; // 统一管理后端地址
 
 export const request = (options: UniApp.RequestOptions) => {
     // 1. 从缓存中获取 Token
