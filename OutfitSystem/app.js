@@ -18,6 +18,10 @@ const userRouter = require('./routes/user');
 const clothesRouter = require('./routes/clothes'); 
 const outfitRouter = require('./routes/outfit'); 
 const uploadRouter = require('./routes/upload'); // 引入上传路由
+const diaryRouter = require('./routes/diary'); // 引入日记路由
+const suitcaseApiRouter = require('./routes/suitcase_api'); // 引入行李箱简单路由
+const chatRouter = require('./routes/chat'); // 引入 AI 对话路由
+const analyticsRouter = require('./routes/analytics'); // 引入统计与灵感路由
 
 // --- 3. 挂载路由 ---
 // 这里的第一个参数决定了前端请求的基础路径
@@ -25,6 +29,10 @@ app.use('/api/user', userRouter);       // 对应前端: http://localhost:3000/a
 app.use('/api/clothes', clothesRouter); // 对应前端: http://localhost:3000/api/clothes/...
 app.use('/api/outfits', outfitRouter);  
 app.use('/api/upload', uploadRouter);   // 挂载上传接口
+app.use('/api/diary', diaryRouter);     // 日记接口
+app.use('/api/suitcases', suitcaseApiRouter); // 行李箱接口
+app.use('/api/chat', chatRouter);       // 挂载 AI 对话接口
+app.use('/api/analytics', analyticsRouter); // 挂载统计与灵感接口
 
 // --- 4. 404 捕获 (处理未定义的路径) ---
 app.use((req, res, next) => {

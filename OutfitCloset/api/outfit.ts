@@ -45,8 +45,8 @@ export const deleteOutfit = (id: number | string) => {
 
 // --- 日历相关 ---
 
-// 获取日历数据
-export const getCalendarList = (params: { account: string, year: number, month: number }) => {
+// 获取日历列表
+export const getCalendarList = (params: { account: string; year: number; month: number }) => {
     return request({
         url: '/outfits/calendar/list',
         method: 'GET',
@@ -55,7 +55,7 @@ export const getCalendarList = (params: { account: string, year: number, month: 
 };
 
 // 添加到日历
-export const addToCalendar = (data: { account: string, outfit_id: number | string, date: string }) => {
+export const addToCalendar = (data: { account: string; outfit_id: number | string; date: string }) => {
     return request({
         url: '/outfits/calendar',
         method: 'POST',
@@ -64,9 +64,9 @@ export const addToCalendar = (data: { account: string, outfit_id: number | strin
 };
 
 // 从日历移除
-export const removeFromCalendar = (id: number | string) => {
+export const removeFromCalendar = (calendarId: number | string) => {
     return request({
-        url: `/outfits/calendar/${id}`,
+        url: `/outfits/calendar/${calendarId}`,
         method: 'DELETE'
     });
 };

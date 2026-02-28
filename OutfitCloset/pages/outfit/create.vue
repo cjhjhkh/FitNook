@@ -5,14 +5,14 @@
             <view class="back-btn" @tap="goBack">
                 <van-icon name="arrow-left" size="22px" color="#333" />
             </view>
-            <text>{{ outfitId ? '编辑搭配' : 'DIY搭配' }}</text>
-            <view v-if="outfitId" class="delete-outfit-btn" @tap="handleDelete">
+            <text>{{ outfitId ? (isReadOnly ? '搭配详情' : '编辑搭配') : 'DIY搭配' }}</text>
+            <view v-if="outfitId && !isReadOnly" class="delete-outfit-btn" @tap="handleDelete">
                 <van-icon name="delete-o" size="22px" color="#ee0a24" />
             </view>
         </view>
 
         <!-- 顶部工具栏 -->
-        <view class="top-bar">
+        <view class="top-bar" v-if="!isReadOnly">
             <view class="bg-selector">
                 <view v-for="(color, index) in bgColors" :key="index" class="color-dot"
                     :class="{ active: currentBg === color }" :style="{ background: color }" @tap="currentBg = color">
@@ -50,7 +50,7 @@
                     :style="{ transform: item.isFlipped ? 'scaleX(-1)' : 'none' }" />
 
                 <!-- 选中状态下的操作控件 -->
-                <view v-if="activeUuid === item.uuid && !item.locked" class="controls">
+                <view v-if="activeUuid === item.uuid && !item.locked && !isReadOnly" class="controls">
                     <!-- 删除按钮 (左上角) -->
                     <view class="ctrl-btn delete-btn" @tap.stop="deleteItem(index)">
                         <van-icon name="cross" color="#fff" size="12px" />
@@ -71,7 +71,7 @@
                 </view>
 
                 <!-- 锁定状态下的提示/解锁按钮 (右上角) -->
-                <view v-if="activeUuid === item.uuid && item.locked" class="controls locked-controls">
+                <view v-if="activeUuid === item.uuid && item.locked && !isReadOnly" class="controls locked-controls">
                     <view class="ctrl-btn unlock-btn" @tap.stop="unlockItem(item)">
                         <van-icon name="lock" color="#f44" size="12px" />
                     </view>
@@ -79,12 +79,12 @@
             </view>
 
             <view v-if="canvasItems.length === 0" class="empty-tip">
-                点击下方衣物添加到画布
+                {{ isReadOnly ? '暂无衣物' : '点击下方衣物添加到画布' }}
             </view>
         </view>
 
         <!-- 底部衣橱面板 -->
-        <view class="bottom-panel" :class="{ expanded: isPanelExpanded }" @tap.stop="expandPanel">
+        <view class="bottom-panel" :class="{ expanded: isPanelExpanded }" @tap.stop="expandPanel" v-if="!isReadOnly">
             <!-- 分类 Tab -->
             <view class="category-tabs">
                 <scroll-view scroll-x class="tabs-scroll" :show-scrollbar="false">
@@ -223,7 +223,7 @@
 
         <!-- 底部添加按钮 -->
         <image class="add-btn" :class="{ 'btn-collapsed': !isPanelExpanded }" src="/static/icon/add.png"
-            @tap="showClothingSelect" />
+            @tap="showClothingSelect" v-if="!isReadOnly" />
 
     </view>
 
@@ -262,6 +262,7 @@ const currentBg = ref(bgColors[1]);
 const canvasItems = ref<CanvasItem[]>([]);
 const activeUuid = ref<string>('');
 const outfitId = ref<string | number>(''); // 当前编辑的搭配ID
+const isReadOnly = ref(false); // 是否只读模式
 const targetDate = ref(''); // 来源日期（如果有）
 const canvasRect = ref({ width: 0, height: 0 }); // 画布尺寸
 // 画布相对于屏幕的位置，用于计算旋转中心
@@ -378,6 +379,10 @@ const handleDelete = () => {
 
 // --- 生命周期 ---
 onLoad((options: any) => {
+    if (options.mode === 'view' || options.readonly === 'true') {
+        isReadOnly.value = true;
+    }
+
     if (options.id) {
         outfitId.value = options.id;
         loadOutfitDetail(options.id);
@@ -470,6 +475,11 @@ const generateSnapshot = (): Promise<string> => {
 
             // 按 zIndex 排序
             const sortedItems = [...canvasItems.value].sort((a, b) => a.zIndex - b.zIndex);
+            
+            // 计算缩放比例 (适配不同屏幕尺寸到 375x375 的快照)
+            const currentW = canvasRect.value.width || 375;
+            // 假设画布大致是正方形或以宽度为基准
+            const ratio = 375 / currentW;
 
             // 2. 并发下载图片
             const imageTasks = sortedItems.map(item => {
@@ -506,10 +516,13 @@ const generateSnapshot = (): Promise<string> => {
                 const { path, item } = imgData;
 
                 ctx.save();
-                ctx.translate(item.x, item.y);
+                // 使用比例转换坐标
+                ctx.translate(item.x * ratio, item.y * ratio);
                 ctx.rotate(item.rotate * Math.PI / 180);
-                // 确保宽高与缩放逻辑正确
-                ctx.scale(item.scale, item.scale);
+                // 确保宽高与缩放逻辑正确，叠加全局缩放比例
+                const finalScale = item.scale * ratio;
+                ctx.scale(finalScale, finalScale);
+                
                 if (item.isFlipped) ctx.scale(-1, 1);
                 ctx.drawImage(path, -item.width / 2, -item.height / 2, item.width, item.height);
                 ctx.restore();
@@ -590,9 +603,37 @@ const confirmSave = async () => {
 
     // 1. 生成封面图
     // 如果生成失败返回空字符串，后端会自动使用第一件单品的图作为封面
-    const snapshotUrl = await generateSnapshot();
+    let snapshotTempPath = await generateSnapshot();
+    let finalSnapshotUrl = '';
+
+    // 如果生成了临时路径，必须先上传换取网络地址
+    if (snapshotTempPath) {
+         try {
+             // 提示用户正在上传
+             uni.showLoading({ title: '封面上传中...' });
+             const uploadRes: any = await uploadSnapshot(snapshotTempPath);
+             
+             // 兼容不同的后端返回格式 (可能是直接返回 URL 字符串，或者对象 { url: '...' })
+             if (typeof uploadRes === 'string') {
+                 finalSnapshotUrl = uploadRes;
+             } else if (uploadRes && uploadRes.url) {
+                 finalSnapshotUrl = uploadRes.url;
+             } else if (uploadRes && uploadRes.data && uploadRes.data.url) {
+                 finalSnapshotUrl = uploadRes.data.url;
+             }
+         } catch (err) {
+             console.error('封面上传失败，将使用默认封面', err);
+             // 上传失败不阻断保存，只是没有封面图
+         } finally {
+             uni.hideLoading();
+         }
+    }
 
     // 2. 准备数据
+    const { width: cW, height: cH } = canvasRect.value;
+    const safeW = cW || 375;
+    const safeH = cH || 375;
+
     // 收集所有衣物的ID
     const items = canvasItems.value.map(item => ({
         // 【关键修复】字段名必须为 cloth_id，与后端 routes/outfit.js 接收的字段一致！
@@ -600,8 +641,10 @@ const confirmSave = async () => {
         cloth_id: item.id,
 
         image_url: item.image_url,
-        position_x: item.x, // 这里仍然保存绝对坐标，但在多端适配时建议后续转为相对坐标
-        position_y: item.y,
+        // 转为相对坐标 (0-1)，适配多端屏幕
+        position_x: Number((item.x / safeW).toFixed(4)),
+        position_y: Number((item.y / safeH).toFixed(4)),
+        
         scale: item.scale,
         rotation: item.rotate,
         z_index: item.zIndex,
@@ -626,20 +669,46 @@ const confirmSave = async () => {
         temperature: form.value.temperature,
         bg_color: currentBg.value,
         items: items,
-        image_url: snapshotUrl // 如果为空，后端会处理
+        image_url: finalSnapshotUrl // 使用上传后的 URL
     };
 
     try {
         let res;
+        let savedOutfitId = outfitId.value; // 用于后续关联日历
+
         if (outfitId.value) {
             res = await updateOutfit(outfitId.value, data);
         } else {
             res = await createOutfit(data);
+            // 获取新创建的搭配ID
+            if ((res as any).code === 200 && (res as any).data) {
+                // 兼容后端返回格式，可能是 data.id 或直接在 data 里
+                savedOutfitId = (res as any).data.id || (res as any).data;
+            }
         }
 
         if ((res as any).code === 200 || (res as any).success) {
+            
+            // 如果有来源日期，且保存成功，且有搭配ID，则关联到日历
+            if (targetDate.value && savedOutfitId) {
+                try {
+                    await addToCalendar({
+                        account: currentUser.account,
+                        outfit_id: savedOutfitId,
+                        date: targetDate.value
+                    });
+                } catch (calError) {
+                    console.error('自动添加到日历失败', calError);
+                    // 不阻断主流程，仅控制台记录
+                }
+            }
+
             uni.showToast({ title: '保存成功', icon: 'success' });
             showSavePopup.value = false;
+            
+            // 发送刷新事件，确保由于页面缓存导致的列表不更新问题得到解决
+            uni.$emit('refreshOutfitList'); 
+            uni.$emit('refreshDiaryList');
 
             // 延迟跳转，以便用户看到成功提示
             setTimeout(() => {
@@ -920,6 +989,8 @@ const deleteItem = (index: any) => { canvasItems.value.splice(Number(index), 1);
 
 // --- 触摸拖拽逻辑 (移动) ---
 const onTouchStart = (item: CanvasItem, event: any) => {
+    if (isReadOnly.value) return;
+
     // 选中当前项
     if (activeUuid.value !== item.uuid) {
         activeUuid.value = item.uuid;
@@ -999,8 +1070,8 @@ const onHandleMove = (event: any) => {
     const angle = Math.atan2(vecY, vecX) * (180 / Math.PI);
     currentItem.rotate = angle - initialRotate;
 
-    // 计算缩放
-    const dist = Math.sqrt(vecX * vecY + vecY * vecY);
+    // 计算缩放 (修复公式 typo: vecX * vecX)
+    const dist = Math.sqrt(vecX * vecX + vecY * vecY);
     let newScale = dist * initialScale;
 
     // 限制缩放范围
@@ -1274,27 +1345,27 @@ const showClothingSelect = () => {
         display: flex;
         align-items: center;
         justify-content: center;
-        pointer-events: auto;
     }
 }
 
 .bottom-panel {
-    /* height: 40vh; 由 height 动画控制 */
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 60vh;
     background: #fff;
-    border-top-left-radius: 16px;
-    border-top-right-radius: 16px;
-    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
-    /* 改为高度过渡，实现挤压式布局，而非覆盖 */
-    transition: height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-    height: calc(54px + env(safe-area-inset-bottom));
-    /* 默认只露出一行 */
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.05);
+    z-index: 90;
+    transition: transform 0.3s ease-out;
+    transform: translateY(calc(100% - 54px - env(safe-area-inset-bottom)));
     display: flex;
     flex-direction: column;
-    z-index: 200;
+    padding-bottom: env(safe-area-inset-bottom);
 
     &.expanded {
-        height: 60vh;
-        /* 展开高度 */
+        transform: translateY(0);
     }
 }
 

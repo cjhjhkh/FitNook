@@ -7,6 +7,10 @@
 					@change="onSearchChange" @search="loadOutfits" />
 			</view>
 			<view class="action-icons">
+				<view class="icon-btn" @tap="goToSuitcase">
+					<van-icon name="bag-o" size="22px" color="#333" />
+					<text class="icon-text">行李箱</text>
+				</view>
 				<view class="icon-btn" @tap="goToDiary">
 					<van-icon name="calendar-o" size="22px" color="#333" />
 					<text class="icon-text">日历</text>
@@ -81,6 +85,13 @@
                                 <van-icon name="photo-o" size="32px" color="#eee" />
                             </view>
 						</view>
+
+                        <!-- 选择模式蒙板 -->
+                        <view v-if="isSelectMode" class="select-mask">
+                            <view class="select-icon" :class="{ checked: selectedIds.includes(item.id) }">
+                                <van-icon v-if="selectedIds.includes(item.id)" name="success" color="#fff" size="14px" />
+                            </view>
+                        </view>
 					</view>
 					<view class="card-info">
 						<text class="outfit-name">{{ item.name || '未命名搭配' }}</text>
@@ -99,6 +110,21 @@
 			
 			<view class="safe-bottom"></view>
 		</scroll-view>
+
+        <!-- 底部操作栏 (仅在选择模式下显示) -->
+		<view v-if="isSelectMode" class="bottom-action-bar safe-area-inset-bottom">
+			<view class="selected-info">
+				已选 {{ selectedIds.length }} 套搭配
+			</view>
+			<view class="confirm-btn" @tap="confirmSelection">
+				<van-icon name="check" size="18px" />
+				<text>确认添加</text>
+			</view>
+		</view>
+
+		<view class="fab-add" @tap="goToCreate" v-if="!isSelectMode">
+			<van-icon name="plus" size="24px" color="#fff" />
+		</view>
 	</view>
 </template>
 
@@ -107,6 +133,7 @@ import { ref, onMounted } from 'vue';
 // @ts-ignore
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app';
 import { getOutfitList } from '@/api/outfit';
+import { getSuitcaseDetail, updateSuitcase, addSuitcaseContent } from '@/api/suitcase';
 
 // --- 类型定义 ---
 interface OutfitItem {
@@ -133,12 +160,11 @@ const keyword = ref('');
 const currentTab = ref('all');
 const tabs = [
 	{ label: '全部', value: 'all' },
+	{ label: '日常', value: '日常' },
 	{ label: '通勤', value: '通勤' },
 	{ label: '约会', value: '约会' },
-	{ label: '休闲', value: '休闲' },
 	{ label: '运动', value: '运动' },
-	{ label: '居家', value: '居家' },
-	{ label: '派对', value: '派对' }
+	{ label: '度假', value: '度假' }
 ];
 
 const outfitList = ref<OutfitItem[]>([]);
@@ -147,12 +173,28 @@ const pageSize = ref(10);
 const loading = ref(false);
 const finished = ref(false);
 
+// 选择模式状态
+const isSelectMode = ref(false);
+const selectionTargetId = ref('');
+const selectedIds = ref<number[]>([]);
+
 // --- 生命周期 ---
-onLoad(() => {
+onLoad((options: any) => {
+    if (options.mode === 'select') {
+        isSelectMode.value = true;
+        selectionTargetId.value = options.targetId || '';
+        uni.setNavigationBarTitle({ title: '选择搭配' });
+        uni.hideTabBar();
+    }
+
     loadOutfits();
     // 监听刷新事件
     uni.$on('refreshOutfitList', () => {
         loadOutfits();
+    });
+    // 监听新建返回
+    uni.$on('refreshOutfits', () => {
+        loadOutfits(true);
     });
 });
 
@@ -189,6 +231,7 @@ const loadOutfits = async (isLoadMore = false) => {
 		};
         
 		// 如果选中的不是"全部"，则传递 scene 参数进行筛选
+        // 修正：后端根据 scene 字段筛选，前端 filter-row 的值需要映射到 scene
 		if (currentTab.value !== 'all') {
 			requestParams.scene = currentTab.value;
 		}
@@ -258,15 +301,79 @@ const onLoadMore = () => {
 
 // 跳转到新建页面
 const goToCreate = () => {
+    if (isSelectMode.value) return; // 选择模式下禁用新建
 	uni.navigateTo({
 		url: '/pages/outfit/create'
 	});
 };
 
-// 跳转到详情/编辑页面
+// 跳转到详情/编辑页面 (或切换选中状态)
 const goToDetail = (item: OutfitItem) => {
+    if (isSelectMode.value) {
+        toggleSelect(item.id);
+    } else {
+        // 修正：点击穿搭卡片进入穿搭编辑页 (create)，而不是日记详情页
+        uni.navigateTo({
+            url: `/pages/outfit/create?id=${item.id}`
+        });
+    }
+};
+
+// 切换选中
+const toggleSelect = (id: number) => {
+    const idx = selectedIds.value.indexOf(id);
+    if (idx > -1) {
+        selectedIds.value.splice(idx, 1);
+    } else {
+        selectedIds.value.push(id);
+    }
+};
+
+// 确认选择
+const confirmSelection = async () => {
+    if (selectedIds.value.length === 0) {
+        uni.showToast({ title: '请先选择搭配', icon: 'none' });
+        return;
+    }
+
+    if (!selectionTargetId.value) {
+        uni.showToast({ title: '目标无效', icon: 'none' });
+        return;
+    }
+
+    uni.showLoading({ title: '添加中...' });
+
+    try {
+        // 使用增量添加接口
+        const res: any = await addSuitcaseContent({
+            id: selectionTargetId.value,
+            outfit_ids: selectedIds.value
+        });
+
+        if (res.code === 200) {
+            uni.hideLoading();
+            uni.showToast({ title: '添加成功', icon: 'success' });
+            
+            // 通知上一页刷新
+            uni.$emit('suitcaseUpdated', { id: selectionTargetId.value });
+            
+            setTimeout(() => {
+                uni.navigateBack();
+            }, 800);
+        } else {
+            uni.showToast({ title: res.msg || '添加失败', icon: 'none' });
+        }
+    } catch (e) {
+        uni.hideLoading();
+        console.error(e);
+        uni.showToast({ title: '添加失败', icon: 'none' });
+    }
+};
+
+// 跳转到行李箱页面
+const goToSuitcase = () => {
 	uni.navigateTo({
-		url: `/pages/outfit/create?id=${item.id}`
+		url: '/pages/suitcase/index'
 	});
 };
 
@@ -464,6 +571,33 @@ $text-light: #999;
 						justify-content: center;
 					}
 				}
+
+                .select-mask {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.4);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 2;
+
+                    .select-icon {
+                        width: 40rpx;
+                        height: 40rpx;
+                        border: 2rpx solid #fff;
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+
+                        &.checked {
+                            background: #1989fa;
+                        }
+                    }
+                }
 			}
 
 			.card-info {
@@ -550,5 +684,53 @@ $text-light: #999;
 	.safe-bottom {
 		height: 40rpx;
 	}
+
+    .batch-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background: #fff;
+        box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 20rpx 24rpx;
+        z-index: 10;
+
+        .batch-info {
+            font-size: 28rpx;
+            color: $text-main;
+        }
+
+        .batch-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10rpx 20rpx;
+            background: $primary;
+            color: #fff;
+            border-radius: 30rpx;
+            font-size: 28rpx;
+            font-weight: 500;
+
+            .van-icon {
+                margin-right: 8rpx;
+            }
+        }
+    }
+
+    .animate-slide-up {
+        animation: slide-up 0.3s ease-out;
+    }
+
+    @keyframes slide-up {
+        from {
+            transform: translateY(100%);
+        }
+        to {
+            transform: translateY(0);
+        }
+    }
 }
 </style>

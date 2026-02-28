@@ -43,15 +43,28 @@ router.post('/', async (req, res) => {
 
         // 3. 插入穿搭单品表
         if (items && items.length > 0) {
+            // 预先查询 items 的原图，作为兜底
+            const clothIds = items.map(i => i.cloth_id || i.id).filter(id => id);
+            let clothMap = {};
+            if (clothIds.length > 0) {
+                const [clothRows] = await connection.query('SELECT id, image_url FROM clothes WHERE id IN (?)', [clothIds]);
+                clothRows.forEach(row => {
+                    clothMap[row.id] = row.image_url;
+                });
+            }
+
             const itemValues = [];
             for (const item of items) {
                 // 兼容 cloth_id 和 id 字段，并过滤无效ID
                 const clothId = item.cloth_id || item.id;
                 if (clothId) {
+                    // 使用兜底逻辑：如果前端没传 image_url，或者为空，则使用原图
+                    const finalImageUrl = item.image_url || clothMap[clothId] || '';
+
                     itemValues.push([
                         outfitId,
                         clothId,
-                        item.image_url,
+                        finalImageUrl,
                         item.position_x,
                         item.position_y,
                         item.scale,
@@ -65,36 +78,50 @@ router.post('/', async (req, res) => {
 
             if (itemValues.length > 0) {
                 await connection.query(`
-                    INSERT INTO outfit_items 
-                    (outfit_id, cloth_id, image_url, position_x, position_y, scale, rotation, z_index, is_flipped, is_locked)
+                    INSERT INTO outfit_items (outfit_id, cloth_id, image_url, position_x, position_y, scale, rotation, z_index, is_flipped, is_locked)
                     VALUES ?
                 `, [itemValues]);
             }
         }
 
-        // 4. 插入标签关联 (场景 & 季节)
+        // 4. 插入标签 (Scenes & Seasons)
         const tagRelations = [];
-        if (scene_ids && scene_ids.length > 0) {
-            scene_ids.forEach(tagId => tagRelations.push([outfitId, tagId, 'OUTFIT']));
+        const seenTags = new Set(); // 用于去重
+
+        if (scene_ids) {
+            const sIds = Array.isArray(scene_ids) ? scene_ids : String(scene_ids).split(',');
+            sIds.forEach(tagId => {
+                const sId = String(tagId).trim();
+                if (sId && !seenTags.has(sId)) {
+                    tagRelations.push([outfitId, sId, 'OUTFIT']);
+                    seenTags.add(sId);
+                }
+            });
         }
-        if (season_ids && season_ids.length > 0) {
-            season_ids.forEach(tagId => tagRelations.push([outfitId, tagId, 'OUTFIT']));
+        if (season_ids) {
+            const seaIds = Array.isArray(season_ids) ? season_ids : String(season_ids).split(',');
+            seaIds.forEach(tagId => {
+                const sId = String(tagId).trim();
+                if (sId && !seenTags.has(sId)) {
+                    tagRelations.push([outfitId, sId, 'OUTFIT']);
+                    seenTags.add(sId);
+                }
+            });
         }
 
         if (tagRelations.length > 0) {
             await connection.query(`
-                INSERT INTO entity_tag_relation (entity_id, tag_id, entity_type)
+                INSERT IGNORE INTO entity_tag_relation (entity_id, tag_id, entity_type)
                 VALUES ?
             `, [tagRelations]);
         }
 
         await connection.commit();
-        res.json({ code: 200, msg: '穿搭保存成功', data: { id: outfitId } });
-
+        res.json({ code: 200, msg: '保存成功', data: { id: outfitId } });
     } catch (err) {
         await connection.rollback();
         console.error('保存穿搭失败:', err);
-        res.status(500).json({ code: 500, msg: '保存失败', error: err.message });
+        res.status(500).json({ code: 500, msg: '服务器错误' });
     } finally {
         connection.release();
     }
@@ -102,7 +129,7 @@ router.post('/', async (req, res) => {
 
 // 获取穿搭列表
 router.get('/', async (req, res) => {
-    const { account, page = 1, limit = 10, scene, season } = req.query;
+    const { account, page = 1, limit = 10, scene, season, keyword } = req.query; // 增加 keyword
     const offset = (page - 1) * limit;
 
     try {
@@ -114,6 +141,12 @@ router.get('/', async (req, res) => {
         // 构建筛选条件
         let whereClause = 'WHERE o.user_id = ?';
         const params = [userId];
+
+        // 关键词搜索
+        if (keyword && keyword.trim() !== '') {
+            whereClause += ` AND o.name LIKE ?`;
+            params.push(`%${keyword.trim()}%`);
+        }
 
         // 筛选场景
         if (scene && scene !== 'all') {
@@ -170,7 +203,7 @@ router.get('/', async (req, res) => {
             // 3. 填充 Items (每个搭配取前4张图用于预览)
             // 修复：关联 clothes 表，获取 cloth_image_url 作为回退，防止图片缺失
             const [allItems] = await db.query(`
-                SELECT oi.outfit_id, oi.image_url, oi.position_x, oi.position_y, oi.scale, oi.rotation, oi.z_index, oi.is_flipped,
+                SELECT oi.outfit_id, oi.cloth_id, oi.image_url, oi.position_x, oi.position_y, oi.scale, oi.rotation, oi.z_index, oi.is_flipped,
                        c.image_url as cloth_image_url
                 FROM outfit_items oi
                 LEFT JOIN clothes c ON oi.cloth_id = c.id
@@ -191,6 +224,7 @@ router.get('/', async (req, res) => {
                 row.items = allItems
                     .filter(i => i.outfit_id === row.id)
                     .map(i => ({
+                        cloth_id: i.cloth_id, // 新增：必须返回 cloth_id 供前端联动使用
                         image_url: i.image_url || i.cloth_image_url, // 优先用快照图，否则用原图
                         x: i.position_x !== null ? i.position_x : 0.5,
                         y: i.position_y !== null ? i.position_y : 0.5,
@@ -262,7 +296,7 @@ router.get('/:id', async (req, res) => {
 
         res.json({ code: 200, data: outfit });
     } catch (err) {
-        console.error(err);
+        console.error('获取详情失败:', err);
         res.status(500).json({ code: 500, msg: '获取详情失败' });
     }
 });
@@ -352,16 +386,32 @@ router.put('/:id', async (req, res) => {
         await connection.query(`DELETE FROM entity_tag_relation WHERE entity_id = ? AND entity_type = 'OUTFIT'`, [outfitId]);
 
         const tagRelations = [];
-        if (scene_ids && scene_ids.length > 0) {
-            scene_ids.forEach(tagId => tagRelations.push([outfitId, tagId, 'OUTFIT']));
+        const seenTags = new Set(); // 用于去重
+        
+        if (scene_ids) {
+            const sIds = Array.isArray(scene_ids) ? scene_ids : String(scene_ids).split(',');
+            sIds.forEach(tagId => {
+                const sId = String(tagId).trim();
+                if (sId && !seenTags.has(sId)) {
+                    tagRelations.push([outfitId, sId, 'OUTFIT']);
+                    seenTags.add(sId);
+                }
+            });
         }
-        if (season_ids && season_ids.length > 0) {
-            season_ids.forEach(tagId => tagRelations.push([outfitId, tagId, 'OUTFIT']));
+        if (season_ids) {
+            const seaIds = Array.isArray(season_ids) ? season_ids : String(season_ids).split(',');
+            seaIds.forEach(tagId => {
+                const sId = String(tagId).trim();
+                if (sId && !seenTags.has(sId)) {
+                    tagRelations.push([outfitId, sId, 'OUTFIT']);
+                    seenTags.add(sId);
+                }
+            });
         }
 
         if (tagRelations.length > 0) {
             await connection.query(`
-                INSERT INTO entity_tag_relation (entity_id, tag_id, entity_type)
+                INSERT IGNORE INTO entity_tag_relation (entity_id, tag_id, entity_type)
                 VALUES ?
             `, [tagRelations]);
         }
@@ -411,76 +461,77 @@ router.delete('/:id', async (req, res) => {
 
 // --- 日历相关接口 ---
 
-// 获取日历数据
+// 获取指定月份的穿搭日历
+// GET /api/outfits/calendar/list?account=xxx&year=2023&month=10
 router.get('/calendar/list', async (req, res) => {
-    const { account, year, month } = req.query;
-    if (!account || !year || !month) {
-        return res.status(400).json({ code: 400, msg: '参数不完整' });
-    }
-
     try {
+        const { account, year, month } = req.query;
+        if (!account || !year || !month) {
+            return res.status(400).json({ code: 400, msg: '参数不完整' });
+        }
+
+        // 1. 获取用户ID
         const [userRows] = await db.query('SELECT id FROM users WHERE account = ?', [account]);
         if (userRows.length === 0) return res.status(404).json({ code: 404, msg: '用户不存在' });
         const userId = userRows[0].id;
 
-        // 构建日期范围
-        const startDate = `${year}-${month}-01`;
+        // 2. 查询该月份的日历记录
+        const startStr = `${year}-${month.toString().padStart(2, '0')}`;
         
-        const [rows] = await db.query(`
-            SELECT oc.id, oc.date, oc.outfit_id, o.name, o.weather, o.temperature, o.bg_color,
-                   COALESCE(NULLIF(o.image_url, ''), (SELECT image_url FROM outfit_items WHERE outfit_id = o.id ORDER BY z_index ASC LIMIT 1)) as cover,
-                   (SELECT GROUP_CONCAT(t.tag_name SEPARATOR '/') 
-                    FROM entity_tag_relation etr 
-                    JOIN tags t ON etr.tag_id = t.tag_id 
-                    WHERE etr.entity_id = o.id AND etr.entity_type = 'OUTFIT' AND t.tag_type = 'SCENE') as scene
+        const sql = `
+            SELECT 
+                oc.id as calendar_id, 
+                DATE_FORMAT(oc.date, '%Y-%m-%d') as calendar_date,
+                o.id as outfit_id, 
+                o.name, 
+                o.bg_color,
+                COALESCE(NULLIF(o.image_url, ''), (
+                    SELECT COALESCE(NULLIF(oi.image_url, ''), c.image_url)
+                    FROM outfit_items oi
+                    LEFT JOIN clothes c ON oi.cloth_id = c.id
+                    WHERE oi.outfit_id = o.id 
+                    ORDER BY oi.z_index ASC 
+                    LIMIT 1
+                )) as image_url,
+                o.weather, 
+                o.temperature
             FROM outfit_calendar oc
             JOIN outfits o ON oc.outfit_id = o.id
             WHERE oc.user_id = ? 
-            AND oc.date >= ? AND oc.date <= LAST_DAY(?)
+            AND oc.date LIKE ?
             ORDER BY oc.date ASC
-        `, [userId, startDate, startDate]);
+        `;
+        
+        const [rows] = await db.query(sql, [userId, `${startStr}%`]);
+        
+        // 格式化日期
+        const list = rows.map(row => ({
+            ...row,
+            // calendar_date 已经在 SQL 中格式化
+        }));
 
-        const calendarData = {};
-        rows.forEach(row => {
-            const d = new Date(row.date);
-            const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-
-            if (!calendarData[key]) {
-                calendarData[key] = [];
-            }
-            
-            calendarData[key].push({
-                id: row.id,
-                outfit_id: row.outfit_id,
-                name: row.name,
-                weather: row.weather,
-                temperature: row.temperature,
-                bg_color: row.bg_color,
-                cover: row.cover,
-                scene: row.scene
-            });
-        });
-
-        res.json({ code: 200, data: calendarData });
-
+        res.json({ code: 200, data: list });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ code: 500, msg: '获取日历失败' });
+        console.error('获取日历失败:', err);
+        res.status(500).json({ code: 500, msg: '服务器错误' });
     }
 });
 
-// 添加到日历
+// 添加穿搭到日历
+// POST /api/outfits/calendar
 router.post('/calendar', async (req, res) => {
-    const { account, outfit_id, date } = req.body;
-    
-    if (!account || !outfit_id || !date) {
-        return res.status(400).json({ code: 400, msg: '参数不完整' });
-    }
-
     try {
+        const { account, outfit_id, date } = req.body;
+        if (!account || !outfit_id || !date) {
+            return res.status(400).json({ code: 400, msg: '参数不完整' });
+        }
+
         const [userRows] = await db.query('SELECT id FROM users WHERE account = ?', [account]);
         if (userRows.length === 0) return res.status(404).json({ code: 404, msg: '用户不存在' });
         const userId = userRows[0].id;
+
+        // 检查当日是否已添加该outfit (可选，视需求而定，这里允许一天多次穿同一套，或者同一天穿多套)
+        // 如果限制一天只能记录一套，可以在这里加校验
 
         await db.query(`
             INSERT INTO outfit_calendar (user_id, outfit_id, date)
@@ -489,20 +540,21 @@ router.post('/calendar', async (req, res) => {
 
         res.json({ code: 200, msg: '添加成功' });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ code: 500, msg: '添加失败' });
+        console.error('添加日历失败:', err);
+        res.status(500).json({ code: 500, msg: '服务器错误' });
     }
 });
 
-// 从日历移除
+// 从日历移除穿搭
+// DELETE /api/outfits/calendar/:id
 router.delete('/calendar/:id', async (req, res) => {
-    const id = req.params.id;
     try {
-        await db.query('DELETE FROM outfit_calendar WHERE id = ?', [id]);
+        const calendarId = req.params.id;
+        await db.query('DELETE FROM outfit_calendar WHERE id = ?', [calendarId]);
         res.json({ code: 200, msg: '移除成功' });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ code: 500, msg: '移除失败' });
+        console.error('移除日历失败:', err);
+        res.status(500).json({ code: 500, msg: '服务器错误' });
     }
 });
 

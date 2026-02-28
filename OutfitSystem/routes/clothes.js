@@ -95,6 +95,7 @@ router.post('/add', upload.single('image'), async (req, res) => {
 
             // 4. 统一处理标签关联 (Category, Scene, Season)
             const tagRelations = [];
+            const seenTagIds = new Set(); // 新增：全局去重 Set，防止跨类型重复导致主键冲突
 
             // 4.1 分类标签
             // 兼容 category_id 和 category_ids
@@ -105,8 +106,8 @@ router.post('/add', upload.single('image'), async (req, res) => {
             }
             if (category_id) catIds.push(category_id);
 
-            // 去重
-            const uniqueCatIds = [...new Set(catIds)].filter(cid => cid && String(cid).trim());
+            // 统一转字符串并去除空格
+            const uniqueCatIds = [...new Set(catIds.map(id => String(id).trim()))].filter(id => id);
             
             // 如果没有分类标签，添加默认分类
             if (uniqueCatIds.length === 0) {
@@ -115,41 +116,54 @@ router.post('/add', upload.single('image'), async (req, res) => {
             }
 
             uniqueCatIds.forEach(cid => {
-                tagRelations.push([newClothesId, cid, 'ITEM']);
+                if (!seenTagIds.has(cid)) {
+                    tagRelations.push([newClothesId, cid, 'ITEM']);
+                    seenTagIds.add(cid);
+                }
             });
 
             // 4.2 场景标签
             let sIds = [];
             if (scene_ids && scene_ids !== '' && scene_ids !== '-') {
                 sIds = Array.isArray(scene_ids) ? scene_ids : String(scene_ids).split(',');
-                sIds = sIds.map(s => s.trim()).filter(s => s);
             }
             
+            // 统一转字符串并去除空格
+            const uniqueSceneIds = [...new Set(sIds.map(id => String(id).trim()))].filter(id => id);
+
             // 如果没有场景标签，添加默认场景
-            if (sIds.length === 0) {
+            if (uniqueSceneIds.length === 0) {
                 const fallbackId = await getTagId(connection, FALLBACK_TAG_NAMES.SCENE, 'SCENE');
-                if (fallbackId) sIds.push(fallbackId);
+                if (fallbackId) uniqueSceneIds.push(fallbackId);
             }
 
-            sIds.forEach(id => {
-                tagRelations.push([newClothesId, id, 'ITEM']);
+            uniqueSceneIds.forEach(id => {
+                if (!seenTagIds.has(id)) {
+                    tagRelations.push([newClothesId, id, 'ITEM']);
+                    seenTagIds.add(id);
+                }
             });
 
             // 4.3 季节标签
             let seaIds = [];
             if (season_ids && season_ids !== '' && season_ids !== '-') {
                 seaIds = Array.isArray(season_ids) ? season_ids : String(season_ids).split(',');
-                seaIds = seaIds.map(s => s.trim()).filter(s => s);
             }
+
+            // 统一转字符串并去除空格
+            const uniqueSeasonIds = [...new Set(seaIds.map(id => String(id).trim()))].filter(id => id);
 
             // 如果没有季节标签，添加默认季节
-            if (seaIds.length === 0) {
+            if (uniqueSeasonIds.length === 0) {
                 const fallbackId = await getTagId(connection, FALLBACK_TAG_NAMES.SEASON, 'SEASON');
-                if (fallbackId) seaIds.push(fallbackId);
+                if (fallbackId) uniqueSeasonIds.push(fallbackId);
             }
 
-            seaIds.forEach(id => {
-                tagRelations.push([newClothesId, id, 'ITEM']);
+            uniqueSeasonIds.forEach(id => {
+                if (!seenTagIds.has(id)) {
+                    tagRelations.push([newClothesId, id, 'ITEM']);
+                    seenTagIds.add(id);
+                }
             });
 
             // 批量插入标签关联
@@ -427,6 +441,7 @@ router.put('/update/:id', async (req, res) => {
         await connection.query(`DELETE FROM entity_tag_relation WHERE entity_id = ? AND entity_type = 'ITEM'`, [id]);
 
         const newRelations = [];
+        const seenTagIds = new Set(); // 新增：全局去重 Set
 
         // 处理分类 (兼容单选 category_id 和多选 category_ids)
         const catIds = [];
@@ -436,7 +451,7 @@ router.put('/update/:id', async (req, res) => {
         }
         if (category_id) catIds.push(category_id);
         
-        const uniqueCatIds = [...new Set(catIds)].filter(cid => cid && String(cid).trim());
+        const uniqueCatIds = [...new Set(catIds.map(id => String(id).trim()))].filter(id => id);
 
         // 默认分类逻辑
         if (uniqueCatIds.length === 0) {
@@ -445,38 +460,53 @@ router.put('/update/:id', async (req, res) => {
         }
 
         uniqueCatIds.forEach(cid => {
-            newRelations.push([id, cid, 'ITEM']);
+            if (!seenTagIds.has(cid)) {
+                newRelations.push([id, cid, 'ITEM']);
+                seenTagIds.add(cid);
+            }
         });
 
         // 场景
         let sIds = [];
         if (scene_ids) {
             sIds = Array.isArray(scene_ids) ? scene_ids : (typeof scene_ids === 'string' ? scene_ids.split(',') : []);
-            sIds = sIds.map(s => String(s).trim()).filter(s => s);
         }
+        
+        const uniqueSceneIds = [...new Set(sIds.map(id => String(id).trim()))].filter(id => id);
 
         // 默认场景逻辑
-        if (sIds.length === 0) {
+        if (uniqueSceneIds.length === 0) {
             const fallbackId = await getTagId(connection, FALLBACK_TAG_NAMES.SCENE, 'SCENE');
-            if (fallbackId) sIds.push(fallbackId);
+            if (fallbackId) uniqueSceneIds.push(fallbackId);
         }
 
-        sIds.forEach(tid => { newRelations.push([id, tid, 'ITEM']); });
+        uniqueSceneIds.forEach(tid => { 
+            if (!seenTagIds.has(tid)) {
+                newRelations.push([id, tid, 'ITEM']); 
+                seenTagIds.add(tid);
+            }
+        });
 
         // 季节
         let seaIds = [];
         if (season_ids) {
             seaIds = Array.isArray(season_ids) ? season_ids : (typeof season_ids === 'string' ? season_ids.split(',') : []);
-            seaIds = seaIds.map(s => String(s).trim()).filter(s => s);
         }
+        
+        const uniqueSeasonIds = [...new Set(seaIds.map(id => String(id).trim()))].filter(id => id);
 
         // 默认季节逻辑
-        if (seaIds.length === 0) {
+        if (uniqueSeasonIds.length === 0) {
             const fallbackId = await getTagId(connection, FALLBACK_TAG_NAMES.SEASON, 'SEASON');
-            if (fallbackId) seaIds.push(fallbackId);
+            if (fallbackId) uniqueSeasonIds.push(fallbackId);
         }
 
-        seaIds.forEach(tid => { newRelations.push([id, tid, 'ITEM']); });
+        uniqueSeasonIds.forEach(tid => { 
+            if (!seenTagIds.has(tid)) {
+                newRelations.push([id, tid, 'ITEM']); 
+                seenTagIds.add(tid);
+            }
+        });
 
         if (newRelations.length > 0) {
             await connection.query(
@@ -513,6 +543,8 @@ router.post('/batch-delete', async (req, res) => {
 
         // 2. 删除主表数据 (数据库设置了 ON DELETE CASCADE，会自动删除 entity_tag_relation)
         await connection.query('DELETE FROM clothes WHERE id IN (?)', [ids]);
+
+        // 3. 清理 MinIO 文件
 
         // 3. 清理 MinIO 文件
         if (rows.length > 0) {

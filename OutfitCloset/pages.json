@@ -37,9 +37,17 @@
 			}
 		},
 		{
+			"path": "pages/chat/chat",
+			"style": {
+				"navigationBarTitleText": "AI 搭配师",
+				"navigationBarBackgroundColor": "#fff",
+				"backgroundColor": "#f7f8fa"
+			}
+		},
+		{
 			"path": "pages/index/index",
 			"style": {
-				"navigationBarTitleText": "穿搭灵感"
+				"navigationStyle": "custom"
 			}
 		},
 		{
@@ -58,7 +66,79 @@
 		{
 			"path": "pages/outfit/diary",
 			"style": {
-				"navigationBarTitleText": "穿搭日历"
+				"navigationBarTitleText": "穿搭日记",
+				"enablePullDownRefresh": true,
+				"usingComponents": {
+					"van-calendar": "/wxcomponents/vant/calendar/index",
+					"van-icon": "/wxcomponents/vant/icon/index",
+					"van-button": "/wxcomponents/vant/button/index",
+					"van-popup": "/wxcomponents/vant/popup/index",
+					"van-loading": "/wxcomponents/vant/loading/index"
+				}
+			}
+		},
+		{
+			"path": "pages/outfit/diary-edit",
+			"style": {
+				"navigationBarTitleText": "写日记",
+				"navigationStyle": "custom",
+				"usingComponents": {
+					"van-nav-bar": "/wxcomponents/vant/nav-bar/index",
+					"van-icon": "/wxcomponents/vant/icon/index",
+					"van-button": "/wxcomponents/vant/button/index",
+					"van-calendar": "/wxcomponents/vant/calendar/index",
+					"van-uploader": "/wxcomponents/vant/uploader/index",
+					"van-field": "/wxcomponents/vant/field/index",
+					"van-dialog": "/wxcomponents/vant/dialog/index"
+				}
+			}
+		},
+		{
+			"path": "pages/suitcase/index",
+			"style": {
+				"navigationBarTitleText": "我的行李箱",
+				"enablePullDownRefresh": true,
+				"usingComponents": {
+					"van-button": "/wxcomponents/vant/button/index",
+					"van-icon": "/wxcomponents/vant/icon/index",
+					"van-dialog": "/wxcomponents/vant/dialog/index",
+					"van-popup": "/wxcomponents/vant/popup/index",
+					"van-field": "/wxcomponents/vant/field/index",
+					"van-cell-group": "/wxcomponents/vant/cell-group/index",
+					"van-calendar": "/wxcomponents/vant/calendar/index",
+					"van-radio-group": "/wxcomponents/vant/radio-group/index",
+					"van-radio": "/wxcomponents/vant/radio/index",
+					"van-picker": "/wxcomponents/vant/picker/index",
+					"van-datetime-picker": "/wxcomponents/vant/datetime-picker/index",
+					"van-swipe-cell": "/wxcomponents/vant/swipe-cell/index"
+				}
+			}
+		},
+		{
+			"path": "pages/suitcase/detail",
+			"style": {
+				"navigationBarTitleText": "行李箱详情",
+				"navigationBarBackgroundColor": "#fff",
+				"navigationBarTextStyle": "black",
+				"enablePullDownRefresh": true,
+				"usingComponents": {
+					"van-progress": "/wxcomponents/vant/progress/index",
+					"van-radio": "/wxcomponents/vant/radio/index",
+					"van-radio-group": "/wxcomponents/vant/radio-group/index",
+					"van-loading": "/wxcomponents/vant/loading/index"
+				}
+			}
+		},
+		{
+			"path": "pages/suitcase/selector",
+			"style": {
+				"navigationBarTitleText": "添加物品",
+				"navigationBarBackgroundColor": "#fff",
+				"navigationBarTextStyle": "black",
+				"enablePullDownRefresh": false,
+				"usingComponents": {
+					"van-loading": "/wxcomponents/vant/loading/index"
+				}
 			}
 		},
 		{
@@ -86,6 +166,8 @@
 			"van-field": "/wxcomponents/vant/field/index",
 			"van-cell": "/wxcomponents/vant/cell/index",
 			"van-cell-group": "/wxcomponents/vant/cell-group/index",
+			"van-uploader": "/wxcomponents/vant/uploader/index",
+			"van-calendar": "/wxcomponents/vant/calendar/index",
 			"van-popup": "/wxcomponents/vant/popup/index",
 			"van-picker": "/wxcomponents/vant/picker/index",
 			"van-checkbox": "/wxcomponents/vant/checkbox/index",

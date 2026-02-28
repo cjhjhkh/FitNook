@@ -81,16 +81,16 @@
                                 </view>
                             </view>
 
-                            <view v-if="isSelectMode" class="check-overlay">
+                            <view v-if="isSelectMode" class="check-overlay" @tap.stop="() => toggleSelectByTap(item.id)">
                                 <van-checkbox :name="item.id" icon-size="16px" shape="round"
-                                    :checked="selectedIds.includes(item.id)" @change="bindSelectHandler(item.id)" />
+                                    :value="selectedIds.includes(item.id)" @change="bindSelectHandler(item.id)" />
                             </view>
                         </view>
                         
                         <!-- 标签行：单行显示，超出省略 -->
                         <view class="tag-row">
-                            <text v-for="tag in item.tags" :key="tag.name" class="mini-tag"
-                                :style="{ backgroundColor: tag.color }">{{ tag.name }}</text>
+                            <text v-for="(tag, idx) in item.tags" :key="idx" class="mini-tag"
+                                :style="{ backgroundColor: tag.color, color: tag.textColor || '#666' }">{{ tag.name }}</text>
                         </view>
                     </view>
                 </view>
@@ -109,8 +109,8 @@
                                 </view>
                             </view>
 
-                            <view v-if="isSelectMode" class="check-overlay-l">
-                                <van-checkbox :name="item.id" icon-size="18px" :checked="selectedIds.includes(item.id)"
+                            <view v-if="isSelectMode" class="check-overlay-l" @tap.stop="() => toggleSelectByTap(item.id)">
+                                <van-checkbox :name="item.id" icon-size="18px" :value="selectedIds.includes(item.id)"
                                     @change="bindSelectHandler(item.id)" />
                             </view>
                         </view>
@@ -123,8 +123,8 @@
                                 <text>已穿 {{ item.times }} 次 · 导入于 {{ item.date }}</text>
                             </view>
                             <view class="tag-row-l">
-                                <view v-for="tag in item.tags" :key="tag.name" class="tag-label"
-                                    :style="{ color: tag.color, borderColor: tag.color }">
+                                <view v-for="(tag, idx) in item.tags" :key="idx" class="tag-label"
+                                    :style="{ backgroundColor: tag.color, color: tag.textColor || '#666', borderColor: 'transparent' }">
                                     {{ tag.name }}
                                 </view>
                             </view>
@@ -150,6 +150,10 @@
             <view class="batch-btn tag" @tap="openTagPopup">
                 <van-icon name="label-o" />
                 <text>添加标签</text>
+            </view>
+            <view class="batch-btn confirm" v-if="isSelectionModeFromRoute" @tap="confirmSelection">
+                <van-icon name="check" />
+                <text>确认选择</text>
             </view>
         </view>
 
@@ -270,7 +274,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue';
-import { onShow, onReachBottom } from '@dcloudio/uni-app';
+// @ts-ignore
+import { onShow, onReachBottom, onLoad } from '@dcloudio/uni-app';
 import { 
     getClothesList, 
     batchDeleteClothes, 
@@ -280,6 +285,7 @@ import {
     getSeasons,
     uploadClothes
 } from '@/api/clothes';
+import { getSuitcaseDetail, updateSuitcase, addSuitcaseContent } from '@/api/suitcase';
 
 // --- 状态定义 ---
 const searchKeyword = ref('');
@@ -288,6 +294,11 @@ const isGridLayout = ref(true);
 const isSelectMode = ref(false);
 const showFilter = ref(false); // 筛选抽屉（暂未实现具体内容，保留状态）
 const activeFilterTags = ref<any[]>([]); // 当前选中的筛选标签
+
+// 选择模式相关状态
+const isSelectionModeFromRoute = ref(false); // 是否是从外部路由进入的选择模式
+const selectionTarget = ref(''); // 选择的目标 (e.g., 'suitcase')
+const selectionTargetId = ref(''); // 目标ID
 
 const clothingList = ref<any[]>([]);
 const total = ref(0);
@@ -306,6 +317,16 @@ const seasons = [
     { name: '秋', icon: 'leaf-o', backgroundColor: '#fbe9e7' },
     { name: '冬', icon: 'snow-o', backgroundColor: '#e3f2fd' }
 ];
+
+// 辅助函数：获取季节对应的颜色配置
+const getSeasonColorInfo = (name: string) => {
+    // 简单的关键词匹配
+    if (name.includes('春')) return { bg: '#e8f5e9', text: '#2e7d32' };
+    if (name.includes('夏')) return { bg: '#fff3e0', text: '#ef6c00' };
+    if (name.includes('秋')) return { bg: '#fbe9e7', text: '#d84315' };
+    if (name.includes('冬')) return { bg: '#e3f2fd', text: '#1565c0' };
+    return { bg: '#f3e5f5', text: '#7b1fa2' }; // 默认/四季: 淡紫色
+};
 
 // 添加菜单
 const showAddPopup = ref(false);
@@ -348,6 +369,21 @@ const colorOptions = [
 ];
 
 // --- 生命周期 ---
+onLoad((options: any) => {
+    // 检查是否进入选择模式
+    if (options.mode === 'select') {
+        isSelectMode.value = true;
+        isSelectionModeFromRoute.value = true;
+        selectionTarget.value = options.target || '';
+        selectionTargetId.value = options.targetId || '';
+        
+        // 如果有标题，动态修改
+        uni.setNavigationBarTitle({
+            title: '选择衣物'
+        });
+    }
+});
+
 onShow(() => {
     // 每次显示页面刷新列表
     loadClothesList(true);
@@ -402,14 +438,35 @@ const loadClothesList = async (reset = false) => {
         const res = await getClothesList(params) as any;
         if (res.code === 200) {
             const list = res.data.list.map((item: any) => {
-                // 处理标签：只展示【场景】标签
-                // 1. 获取场景标签
-                let sceneTags = (item.scene_names || []).map((n: string) => ({ name: n, color: '#fff3e0' }));
-                
-                // 2. 如果没有场景标签，默认展示【通用】
-                // 注意：其他如分类、季节标签不再展示
-                if (sceneTags.length === 0) {
-                    sceneTags = [{ name: '通用', color: '#f5f5f5' }];
+                const displayTags = [];
+
+                // 1. 处理季节标签 (优先展示)
+                if (item.season_names && item.season_names.length > 0) {
+                    item.season_names.forEach((name: string) => {
+                         const colorInfo = getSeasonColorInfo(name);
+                         displayTags.push({ 
+                             name: name, 
+                             color: colorInfo.bg, 
+                             textColor: colorInfo.text, // 新增文字颜色字段
+                             type: 'season'
+                         });
+                    });
+                }
+
+                // 2. 处理场景标签
+                if (item.scene_names && item.scene_names.length > 0) {
+                    item.scene_names.forEach((name: string) => {
+                        displayTags.push({ 
+                            name: name, 
+                            color: '#f5f5f5', 
+                            type: 'scene'
+                        });
+                    });
+                }
+
+                // 3. 如果没有任何标签，显示“通用”
+                if (displayTags.length === 0) {
+                    displayTags.push({ name: '通用', color: '#f5f5f5' });
                 }
 
                 return {
@@ -421,7 +478,7 @@ const loadClothesList = async (reset = false) => {
                     date: item.created_at ? item.created_at.split('T')[0] : '',
                     // 增加默认值0，并强制转换为 Number，防止 toFixed 报错
                     costPerTime: Number((item.price && item.wear_count) ? (item.price / item.wear_count) : (item.price || 0)),
-                    tags: sceneTags,
+                    tags: displayTags,
                     category: (item.category_names && item.category_names.length > 0) ? item.category_names[0] : '未分类'
                 };
             });
@@ -569,6 +626,47 @@ const submitBatchTags = () => {
             loadClothesList(true);
         }
     });
+};
+
+// 确认选择（用于外部调用，如添加到行李箱）
+const confirmSelection = async () => {
+    if (selectedIds.value.length === 0) {
+        uni.showToast({ title: '请先选择衣物', icon: 'none' });
+        return;
+    }
+
+    // 如果目标是行李箱
+    if (selectionTarget.value === 'suitcase' && selectionTargetId.value) {
+        uni.showLoading({ title: '添加中...' });
+        try {
+            // 使用增量添加接口，后端会自动处理去重
+            const res: any = await addSuitcaseContent({
+                id: selectionTargetId.value,
+                cloth_ids: selectedIds.value
+            });
+
+            if (res.code === 200) {
+                uni.hideLoading();
+                uni.showToast({ title: '添加成功', icon: 'success' });
+                // 触发事件通知上一页刷新
+                uni.$emit('suitcaseUpdated', { id: selectionTargetId.value });
+                
+                setTimeout(() => {
+                    uni.navigateBack();
+                }, 500);
+            } else {
+                throw new Error(res.msg);
+            }
+        } catch (e) {
+            uni.hideLoading();
+            console.error(e);
+            uni.showToast({ title: '添加失败', icon: 'none' });
+        }
+    } else {
+        // 其他情况（如果有）
+        console.warn('未知的选择目标');
+        isSelectMode.value = false;
+    }
 };
 
 // 添加菜单
@@ -748,6 +846,10 @@ const applyFilter = () => {
                 opacity: 1;
                 /* 选中时不放大整体，避免布局跳动过大 */
                 /* transform: scale(1.1); */
+                
+                .item-content {
+                    /* background-color removed */
+                }
             }
             
             .item-content {
@@ -1055,6 +1157,7 @@ const applyFilter = () => {
         
         &.del { color: #ee0a24; }
         &.tag { color: #1989fa; }
+        &.confirm { color: #07c160; }
         
         text { margin-left: 8rpx; }
     }
