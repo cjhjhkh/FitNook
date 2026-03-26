@@ -118,7 +118,7 @@
                 <view v-if="currentOutfits.length > 0" class="outfit-list">
                     <view v-for="(item, index) in currentOutfits" :key="index" class="outfit-item">
                             <view class="outfit-cover-wrapper" :style="{ background: item.bg_color || '#f5f5f5' }">
-                                <image :src="item.cover" mode="aspectFit" class="outfit-cover" />
+                                <image :src="item.image_url" mode="aspectFit" class="outfit-cover" />
                             </view>
                         <view class="outfit-info" @tap="goToDetail(item.outfit_id)">
                             <text class="outfit-name">{{ item.name }}</text>
@@ -310,6 +310,109 @@ function getTodayStr() {
     return `${y}-${m}-${d}`;
 }
 
+// 加载月度所有数据 (穿搭 + 日记 + 行程)
+const loadAllDataForMonth = async () => {
+    // 避免首次加载闪烁，可选用 loading
+    // uni.showLoading({ title: '加载中...' });
+    try {
+        const userInfo = uni.getStorageSync('userInfo');
+        const account = userInfo ? userInfo.account : '';
+
+        // 并行请求
+        const [calendarRes, diaryRes, suitcaseRes] = await Promise.all([
+            getCalendarList({ account, year: currentYear.value, month: currentMonth.value }),
+            getMonthDiaries({ account, year: currentYear.value, month: currentMonth.value }),
+            account ? getSuitcaseRanges({ account }) : { code: 200, data: [] }
+        ]);
+
+        // 1. 处理日历穿搭数据
+        const newCalendarData: Record<string, DayData> = {};
+        
+        // 初始化当前月每一天的数据结构（可选，或者随用随建）
+        
+        if (calendarRes.code === 200 && Array.isArray(calendarRes.data)) {
+            calendarRes.data.forEach((item: any) => {
+                const date = item.calendar_date;
+                if (!newCalendarData[date]) {
+                    newCalendarData[date] = { outfits: [] };
+                }
+                newCalendarData[date].outfits.push({
+                    outfit_id: item.outfit_id,
+                    calendar_id: item.calendar_id, // 记录关系ID用于删除
+                    name: item.name,
+                    image_url: item.image_url,
+                    scene: item.scene,
+                    temperature: item.temperature,
+                    bg_color: item.bg_color
+                });
+            });
+        }
+
+        // 2. 处理日记概览
+        if (diaryRes.code === 200 && Array.isArray(diaryRes.data)) {
+            diaryRes.data.forEach((diary: any) => {
+                const date = diary.date; // 格式 YYYY-MM-DD
+                if (!newCalendarData[date]) {
+                    newCalendarData[date] = { outfits: [] };
+                }
+                newCalendarData[date].diary = {
+                    id: diary.id,
+                    date: diary.date,
+                    cover: diary.cover,
+                    content: diary.content || (diary.hasContent ? '今日已记录' : '')
+                };
+            });
+        }
+        
+        // 更新本地数据 (覆盖式更新，确保旧数据被清除)
+        calendarData.value = newCalendarData;
+
+        // 3. 处理行程
+        if (suitcaseRes.code === 200) {
+            suitcaseRanges.value = suitcaseRes.data;
+        }
+
+    } catch (e) {
+        console.error('加载日历数据失败', e);
+        // uni.showToast({ title: '数据加载失败', icon: 'none' });
+    } finally {
+        // uni.hideLoading();
+    }
+};
+
+// 刷新时间轴
+const refreshTimeline = async () => {
+    timelinePage.value = 1;
+    timelineList.value = [];
+    timelineHasMore.value = true;
+    await loadMoreTimeline();
+};
+
+// 加载更多时间轴
+const loadMoreTimeline = async () => {
+    if (!timelineHasMore.value || isTimelineLoading.value) return;
+    
+    isTimelineLoading.value = true;
+    try {
+        const userInfo = uni.getStorageSync('userInfo');
+        const account = userInfo ? userInfo.account : '';
+        const res = await getDiaryList({ account, page: timelinePage.value, pageSize: 10 });
+        if (res.code === 200) {
+            const list = res.data;
+            if (list.length < 10) {
+                timelineHasMore.value = false;
+            }
+            // 追加数据
+            timelineList.value = [...timelineList.value, ...list];
+            timelinePage.value++;
+        }
+    } catch (e) {
+        console.error(e);
+    } finally {
+        isTimelineLoading.value = false;
+    }
+};
+
 // 切换视图
 const toggleViewMode = () => {
     viewMode.value = viewMode.value === 'calendar' ? 'timeline' : 'calendar';
@@ -333,243 +436,137 @@ const changeMonth = (step: number) => {
     }
     currentYear.value = y;
     currentMonth.value = m;
-    calendarData.value = {}; // 清空旧数据防止闪烁
+    // 切换月份后，重新加载数据
     loadAllDataForMonth();
 };
 
-// 选择日期
-const selectDate = (day: number) => {
+const selectDate = (date: number) => {
+    const y = currentYear.value;
     const m = String(currentMonth.value).padStart(2, '0');
-    const d = String(day).padStart(2, '0');
-    selectedDate.value = `${currentYear.value}-${m}-${d}`;
-};
+    const d = String(date).padStart(2, '0');
+    selectedDate.value = `${y}-${m}-${d}`;
+}
 
-// 辅助判断
-const isToday = (day: number) => {
-    const today = getTodayStr();
-    const m = String(currentMonth.value).padStart(2, '0');
-    const d = String(day).padStart(2, '0');
-    return `${currentYear.value}-${m}-${d}` === today;
-};
-
-const isSelected = (day: number) => {
-    const m = String(currentMonth.value).padStart(2, '0');
-    const d = String(day).padStart(2, '0');
-    return `${currentYear.value}-${m}-${d}` === selectedDate.value;
-};
-
-// 获取某天的第一张展示图 (优先日记，其次穿搭)
+// 获取日期对应的缩略图 (优先显示日记封面，其次显示第一套穿搭封面)
 const getDayThumbnail = (day: number) => {
+    const y = currentYear.value;
     const m = String(currentMonth.value).padStart(2, '0');
     const d = String(day).padStart(2, '0');
-    const dateKey = `${currentYear.value}-${m}-${d}`;
-    const data = calendarData.value[dateKey];
+    const dateStr = `${y}-${m}-${d}`;
     
+    const data = calendarData.value[dateStr];
     if (!data) return null;
+
     if (data.diary && data.diary.cover) return data.diary.cover;
-    if (data.outfits.length > 0 && data.outfits[0].image_url) return data.outfits[0].image_url;
+    if (data.outfits && data.outfits.length > 0) return data.outfits[0].image_url;
+    
     return null;
 };
 
-// 判断某天是否为空 (无日记且无穿搭)
+// 判断日期是否为空 (无日记且无穿搭)
 const isEmptyDate = (day: number) => {
+    const y = currentYear.value;
     const m = String(currentMonth.value).padStart(2, '0');
     const d = String(day).padStart(2, '0');
-    const dateKey = `${currentYear.value}-${m}-${d}`;
-    const data = calendarData.value[dateKey];
+    const dateStr = `${y}-${m}-${d}`;
     
-    if (!data) return true;
-    return !data.diary && data.outfits.length === 0;
+    // 如果是未来日期，不算"空"(不显示加号)
+    if (dateStr > getTodayStr()) return false;
+    
+    return !calendarData.value[dateStr];
 };
 
-// 获取星期几
+const isToday = (day: number) => {
+    const y = currentYear.value;
+    const m = String(currentMonth.value).padStart(2, '0');
+    const d = String(day).padStart(2, '0');
+    return `${y}-${m}-${d}` === getTodayStr();
+};
+
+const isSelected = (day: number) => {
+    const y = currentYear.value;
+    const m = String(currentMonth.value).padStart(2, '0');
+    const d = String(day).padStart(2, '0');
+    return `${y}-${m}-${d}` === selectedDate.value;
+};
+
+// 获取行程条样式
+const getSuitcaseTrackStyle = (day: number) => {
+    const y = currentYear.value;
+    const m = String(currentMonth.value).padStart(2, '0');
+    const d = String(day).padStart(2, '0');
+    const dateStr = `${y}-${m}-${d}`;
+    
+    // 查找覆盖此日期的行程
+    const range = suitcaseRanges.value.find(r => dateStr >= r.start_date && dateStr <= r.end_date);
+    
+    if (range) {
+        return {
+            isStart: dateStr === range.start_date,
+            isEnd: dateStr === range.end_date
+        };
+    }
+    return null;
+};
+
+// 获取星期几文本
 const getWeekDayStr = (dateStr: string) => {
     const dayIndex = new Date(dateStr).getDay();
     const map = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
     return map[dayIndex];
 };
 
-// 计算行李箱轨道样式
-const getSuitcaseTrackStyle = (day: number) => {
-    const m = String(currentMonth.value).padStart(2, '0');
-    const d = String(day).padStart(2, '0');
-    const dateKey = `${currentYear.value}-${m}-${d}`;
-    
-    // 查找该日期是否在某个 range 内
-    const range = suitcaseRanges.value.find(r => dateKey >= r.start_date && dateKey <= r.end_date);
-    
-    if (!range) return null;
-    
-    return {
-        isStart: dateKey === range.start_date,
-        isEnd: dateKey === range.end_date
-    };
-};
-
-// === 数据加载 ===
-
-// 加载当前月的所有数据 (日记 + 穿搭日历 + 行程)
-async function loadAllDataForMonth() {
-    uni.showLoading({ title: '加载中' });
-    try {
-        const userInfo = uni.getStorageSync('userInfo') || {};
-        const account = userInfo.account; 
-        
-        // 即使没有 account (游客模式?) 也可以尝试加载公共数据或跳过
-        // 但为了严谨，这里假设必须登录
-
-        // 并行请求
-        const promises = [
-             getMonthDiaries({ year: currentYear.value, month: currentMonth.value }),
-             getSuitcaseRanges()
-        ];
-        
-        if (typeof account === 'string' && account.trim() !== '') {
-            promises.push(getCalendarList({ account, year: currentYear.value, month: currentMonth.value }));
-        }
-
-        const results = await Promise.all(promises);
-        
-        const diaryRes = results[0];
-        const suitcaseRes = results[1];
-        // 如果 promises 长度为 3，说明发起了 outfitRes 请求；否则就是空
-        const outfitRes = (promises.length === 3) ? results[2] : { code: 200, data: [] };
-
-        const newData: Record<string, DayData> = {};
-
-        // 1. 处理日记数据
-        if (diaryRes.code === 200) {
-            diaryRes.data.forEach((d: any) => {
-                if (!newData[d.date]) newData[d.date] = { outfits: [] };
-                newData[d.date].diary = {
-                    id: d.id,
-                    date: d.date,
-                    cover: d.cover,
-                    content: d.content
-                };
-            });
-        }
-
-        // 2. 处理穿搭日历数据
-        if (outfitRes.code === 200) {
-            outfitRes.data.forEach((item: any) => {
-                const dateKey = item.calendar_date; // 格式 YYYY-MM-DD
-                 if (!newData[dateKey]) newData[dateKey] = { outfits: [] };
-                 newData[dateKey].outfits.push({
-                     outfit_id: item.outfit_id,
-                     calendar_id: item.calendar_id,
-                     name: item.name,
-                     image_url: item.image_url,
-                     weather: item.weather,
-                     temperature: item.temperature
-                 });
-            });
-        }
-        
-        // 3. 处理行程数据
-        if (suitcaseRes && suitcaseRes.code === 200) {
-            suitcaseRanges.value = suitcaseRes.data;
-        }
-
-        calendarData.value = newData;
-    } catch (e) {
-        console.error(e);
-        uni.showToast({ title: '加载失败', icon: 'none' });
-    } finally {
-        uni.hideLoading();
-    }
-}
-
-// 加载时间轴
-async function refreshTimeline() {
-    timelinePage.value = 1;
-    timelineList.value = [];
-    timelineHasMore.value = true;
-    await loadMoreTimeline();
-}
-
-async function loadMoreTimeline() {
-    if (isTimelineLoading.value || !timelineHasMore.value) return;
-    
-    isTimelineLoading.value = true;
-    try {
-        const res = await getDiaryList({ page: timelinePage.value, pageSize: 10 }) as any;
-        if (res.code === 200) {
-            // 修复：如果数据为空或少于 pageSize，说明没有更多了
-            if (!res.data || res.data.length < 10) {
-                timelineHasMore.value = false;
-            }
-            if (res.data && res.data.length > 0) {
-                timelineList.value = [...timelineList.value, ...res.data];
-                timelinePage.value++;
-            }
-        } else {
-             timelineHasMore.value = false;
-        }
-    } catch (e) {
-        console.error('TimeLine load error', e);
-        timelineHasMore.value = false;
-    } finally {
-        isTimelineLoading.value = false;
-    }
-}
-
-// === 用户交互 ===
-
-const onAddClick = () => {
-    // 跳转到日历选择页或穿搭列表来添加
-    // 这里简单实现：去穿搭列表，带上模式参数
-    uni.navigateTo({
-        url: `/pages/outfit/list?mode=select&targetDate=${selectedDate.value}`
-    });
-};
-
-const goToDetail = (outfitId: number) => {
-    uni.navigateTo({
-        url: `/pages/outfit/create?id=${outfitId}&mode=view`
-    });
-};
-
-const goToDiaryDetail = (item: TimelineItem) => {
-    uni.navigateTo({
-        url: `/pages/outfit/diary-edit?id=${item.id}&date=${item.date}`
-    });
-};
-
 const goToDiaryEdit = () => {
-    // 如果已有日记，去编辑，否则新建
-    if (currentDiary.value) {
-        uni.navigateTo({
-            url: `/pages/outfit/diary-edit?id=${currentDiary.value.id}&date=${selectedDate.value}`
-        });
-    } else {
-        uni.navigateTo({
-            url: `/pages/outfit/diary-edit?date=${selectedDate.value}`
-        });
-    }
+    const id = currentDiary.value ? currentDiary.value.id : '';
+    // 如果已有日记则去编辑，没有则新建（带上日期参数）
+    uni.navigateTo({
+        url: `/pages/outfit/diary-edit?date=${selectedDate.value}&id=${id}`
+    });
+};
+
+const goToDetail = (id: number) => {
+    uni.navigateTo({ url: `/pages/outfit/create?id=${id}&mode=view` });
 };
 
 const goToSuitcaseDetail = (id: number) => {
-    uni.showToast({ title: '行李箱功能开发中...', icon: 'none' });
-    // uni.navigateTo({ url: `/pages/suitcase/detail?id=${id}` });
+    uni.navigateTo({ url: `/pages/suitcase/index?id=${id}` }); // 路径需要对应
 };
 
-const removeOutfit = async (item: OutfitItem) => {
+const onAddClick = () => {
+    // 跳转到搭配列表选择，参数标识是"添加到日历"模式，并带上日期
+    // 修正跳转路径为 index，复用列表页
+    uni.navigateTo({
+        url: `/pages/outfit/index?mode=select_for_calendar&date=${selectedDate.value}`
+    });
+};
+
+// 移除日历上的穿搭
+const removeOutfit = (item: OutfitItem) => {
     uni.showModal({
         title: '提示',
-        content: '确定从今日计划中移除该穿搭吗？',
+        content: '确定从今日计划中移除该搭配吗？',
         success: async (res) => {
             if (res.confirm) {
                 try {
                     await removeFromCalendar(item.calendar_id);
-                    uni.showToast({ title: '已移除', icon: 'success' });
-                    // 局部刷新
-                    loadAllDataForMonth();
-                } catch (e) {
+                    uni.showToast({ title: '已移除', icon: 'none' });
+                    // 本地移除，避免刷新
+                    const dayData = calendarData.value[selectedDate.value];
+                    if (dayData) {
+                        dayData.outfits = dayData.outfits.filter(o => o.calendar_id !== item.calendar_id);
+                    }
+                } catch(e) {
                     uni.showToast({ title: '移除失败', icon: 'none' });
                 }
             }
         }
+    });
+};
+
+// 时间轴点击
+const goToDiaryDetail = (item: TimelineItem) => {
+     uni.navigateTo({
+        url: `/pages/outfit/diary-edit?id=${item.id}&date=${item.date}` // 复用编辑页查看
     });
 };
 </script>

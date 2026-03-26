@@ -1,28 +1,38 @@
 <template>
-	<view class="container">
-		<view class="header">
-			<text class="title">新用户注册</text>
-			<text class="subtitle">创建您的智慧衣橱账号</text>
-		</view>
+	<view class="register-container">
+		<view class="content-wrapper">
+			<view class="header">
+				<text class="title">Create Account</text>
+				<text class="subtitle">Join FitNook today</text>
+			</view>
 
-		<view class="form">
-			<view class="input-item">
-				<text class="label">用户名</text>
-				<input v-model="form.account" placeholder="请输入用户名" class="my-input" />
+			<view class="auth-card">
+				<view class="input-group">
+					<view class="input-item">
+						<van-icon name="manager-o" size="20px" color="#9d84e8" class="icon" />
+						<input v-model="form.account" placeholder="Account Name" placeholder-class="placeholder" />
+					</view>
+					<view class="divider"></view>
+					<view class="input-item">
+						<van-icon name="lock" size="20px" color="#9d84e8" class="icon" />
+						<input v-model="form.password" type="password" placeholder="Password" placeholder-class="placeholder" />
+					</view>
+					<view class="divider"></view>
+					<view class="input-item">
+						<van-icon name="checked" size="20px" color="#9d84e8" class="icon" />
+						<input v-model="form.confirmPassword" type="password" placeholder="Confirm Password" placeholder-class="placeholder" />
+					</view>
+				</view>
+				
+				<button class="submit-btn" @click="handleRegister">
+					<text>Sign Up</text>
+					<van-icon name="arrow" color="#fff" size="16px" />
+				</button>
 			</view>
-			<view class="input-item">
-				<text class="label">设置密码</text>
-				<input v-model="form.password" type="password" placeholder="请输入密码" class="my-input" />
-			</view>
-			<view class="input-item">
-				<text class="label">确认密码</text>
-				<input v-model="form.confirmPassword" type="password" placeholder="请再次输入密码" class="my-input" />
-			</view>
-			
-			<button class="submit-btn" @click="handleRegister">注 册</button>
-			
-			<view class="footer" @click="goLogin">
-				<text>已有账号？立即登录</text>
+
+			<view class="footer-actions">
+				<text class="action-text">Already have an account?</text>
+				<text class="link-text" @click="goLogin">Log In</text>
 			</view>
 		</view>
 	</view>
@@ -39,44 +49,145 @@ const form = reactive({
 });
 
 const handleRegister = async () => {
-	// 1. 前端简单校验
-	if (!form.account || !form.password) {
-		return uni.showToast({ title: '请完整填写信息', icon: 'none' });
+	if (!form.account || !form.password || !form.confirmPassword) {
+		return uni.showToast({ title: 'Please fill in all fields', icon: 'none' });
 	}
 	if (form.password !== form.confirmPassword) {
-		return uni.showToast({ title: '两次密码不一致', icon: 'none' });
+		return uni.showToast({ title: 'Passwords do not match', icon: 'none' });
 	}
 
 	try {
-		uni.showLoading({ title: '提交中...' });
-		// 2. 调用封装好的 API
-		await registerApi({
+		uni.showLoading({ title: 'Creating account...' });
+		const res: any = await registerApi({
 			account: form.account,
 			password: form.password,
 			confirmPassword: form.confirmPassword
 		});
-		
-		uni.showToast({ title: '注册成功' });
-		// 3. 注册成功后去登录
-		setTimeout(() => {
-			uni.navigateTo({ url: '/pages/login/login' });
-		}, 1500);
+
+		if (res.code === 200) {
+			uni.showToast({ title: 'Success! Please Login', icon: 'success' });
+			setTimeout(() => {
+				uni.navigateBack();
+			}, 1500);
+		} else {
+			uni.showToast({ title: res.msg || 'Registration failed', icon: 'none' });
+		}
 	} catch (err) {
-		// 错误已由 request.ts 拦截并弹窗，这里无需处理
+		console.error(err);
 	} finally {
 		uni.hideLoading();
 	}
 };
 
 const goLogin = () => {
-	uni.navigateTo({ url: '/pages/login/login' });
+	uni.navigateBack();
 };
 </script>
 
 <style lang="scss" scoped>
-.container { padding: 60rpx; background: #fff; min-height: 100vh; }
-.header { margin-bottom: 80rpx; .title { font-size: 48rpx; font-weight: bold; } .subtitle { font-size: 26rpx; color: #999; margin-top: 10rpx; display: block; } }
-.input-item { margin-bottom: 40rpx; .label { font-size: 24rpx; color: #666; margin-bottom: 10rpx; display: block; } .my-input { background: #f8f8f8; height: 90rpx; border-radius: 12rpx; padding: 0 30rpx; } }
-.submit-btn { background: #1989fa; color: #fff; height: 90rpx; line-height: 90rpx; border-radius: 45rpx; margin-top: 60rpx; font-size: 32rpx; }
-.footer { text-align: center; margin-top: 40rpx; color: #1989fa; font-size: 26rpx; }
+.register-container {
+	min-height: 100vh;
+	background-color: #ffffff; /* 纯白背景 */
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding: 0 40rpx;
+
+	.header {
+		margin-bottom: 60rpx;
+		.title {
+			font-size: 56rpx;
+			font-weight: 800;
+			color: #4a4a4a; /* 深灰 */
+			display: block;
+			margin-bottom: 16rpx;
+		}
+		.subtitle {
+			font-size: 28rpx;
+			color: #999;
+		}
+	}
+
+	.auth-card {
+		background: #fff;
+		border-radius: 32rpx;
+		padding: 40rpx;
+		box-shadow: 0 10rpx 40rpx rgba(157, 132, 232, 0.15); /* 浅紫色阴影 */
+		border: 1px solid #f2effd;
+
+		.input-group {
+			background: #fbfaff; /* 极淡紫 */
+			border-radius: 20rpx;
+			padding: 10rpx 30rpx;
+			margin-bottom: 40rpx;
+
+			.input-item {
+				display: flex;
+				align-items: center;
+				height: 100rpx;
+				
+				.icon {
+					margin-right: 20rpx;
+				}
+				
+				input {
+					flex: 1;
+					font-size: 30rpx;
+					color: #333;
+				}
+				.placeholder {
+					color: #c4b5fd;
+				}
+			}
+
+			.divider {
+				height: 2rpx;
+				background: #eee;
+				margin: 0 10rpx;
+			}
+		}
+
+		.submit-btn {
+			background: linear-gradient(135deg, #b4a0f8 0%, #8e72dc 100%); /* 浅紫色渐变 */
+			color: #fff;
+			height: 96rpx;
+			border-radius: 48rpx;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 32rpx;
+			font-weight: 600;
+			box-shadow: 0 8rpx 20rpx rgba(142, 114, 220, 0.3);
+			
+			text {
+				margin-right: 8rpx;
+			}
+
+            &:active {
+				opacity: 0.9;
+				transform: scale(0.99);
+			}
+		}
+	}
+
+	.footer-actions {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		margin-top: 60rpx;
+		
+		.action-text {
+			font-size: 28rpx;
+			color: #999;
+			margin-right: 12rpx;
+		}
+		
+		.link-text {
+			font-size: 28rpx;
+			color: #8e72dc; /* 浅紫 */
+			font-weight: bold;
+            padding: 10rpx;
+		}
+	}
+}
 </style>

@@ -1,48 +1,35 @@
 <template>
 	<view class="login-container">
-		<view class="illustration-section">
-			<!-- 临时替换为已存在的图片，原路径 /static/images/fashion-girl.png 不存在 -->
-			<image class="main-char" src="/static/image/clothing1.png" mode="aspectFit" />
-			<view class="floating-icons">
-				<view class="icon-item t-shirt"></view>
-				<view class="icon-item pants"></view>
-			</view>
-		</view>
-
-		<view class="slogan-section">
-			<text class="title">Unlock Your Style Journey!</text>
-			<text class="subtitle">Your Passport to a Smarter Wardrobe</text>
-		</view>
-
-		<view class="form-section">
-			<view class="input-wrap">
-					<van-icon name="manager" size="18px" color="#999" />
-				<input v-model="form.account" placeholder="account / Email" placeholder-class="placeholder-style" />
+		<view class="content-wrapper">
+			<view class="header">
+				<text class="title">Welcome Back</text>
+				<text class="subtitle">Log in to your smart wardrobe</text>
 			</view>
 
-			<view class="input-wrap">
-					<van-icon name="lock" size="18px" color="#999" />
-				<input v-model="form.password" type="password" placeholder="Password"
-					placeholder-class="placeholder-style" />
-				<view class="eye-icon">
-					<van-icon name="eye-o" size="18px" color="#999" />
+			<view class="auth-card">
+				<view class="input-group">
+					<view class="input-item">
+						<van-icon name="manager-o" size="20px" color="#9d84e8" class="icon" />
+						<input v-model="form.account" placeholder="Account" placeholder-class="placeholder" />
+					</view>
+					<view class="divider"></view>
+					<view class="input-item">
+						<van-icon name="lock" size="20px" color="#9d84e8" class="icon" />
+						<input v-model="form.password" type="password" placeholder="Password" placeholder-class="placeholder" />
+					</view>
 				</view>
+				
+				<button class="submit-btn" @click="handleLogin">
+					<text>Log In</text>
+					<van-icon name="arrow" color="#fff" size="16px" />
+				</button>
 			</view>
 
-			<button class="btn-camera-login" @click="handleLogin">
-				<van-icon name="guide-o" size="20px" color="#fff" style="margin-right: 8px;" />
-				<text>Sign In Now</text>
-			</button>
-
-			<view class="register-link" @click="toRegister">
-				<van-icon name="add-o" size="18px" color="#fff" />
-				<text>Create New Account</text>
+			<view class="footer-actions">
+				<text class="action-text" @click="toRegister">Create Account</text>
+				<text class="separator">|</text>
+				<text class="action-text">Forgot Password?</text>
 			</view>
-		</view>
-
-		<view class="footer-links">
-			<text class="link">Forgot Password</text>
-			<text class="link">Browse as Guest</text>
 		</view>
 	</view>
 </template>
@@ -62,11 +49,11 @@ const handleLogin = async () => {
 		return uni.showToast({ title: 'Please fill in all fields', icon: 'none' });
 	}
 
-
+	// 2. 显示加载中
 	uni.showLoading({ title: 'Signing in...' });
 
 	try {
-		// 2. 调用真实的 API 接口
+		// 3. 调用 API (修正类型定义)
 		const res: any = await loginApi({
 			account: form.account,
 			password: form.password
@@ -74,14 +61,13 @@ const handleLogin = async () => {
 		
 		console.log('Login response:', res);
 
-		// 3. 存储 Token 和用户信息到本地缓存
+		// 4. 处理响应
 		if (res && res.code === 200) {
-			// 兼容处理：防止后端返回结构变化，尝试从 res 或 res.data 中获取
+			// 兼容处理：防止后端返回结构变化
 			const userInfo = res.userInfo || (res.data && res.data.userInfo);
 			const token = res.token || (res.data && res.data.token);
 			
 			if (!userInfo) {
-				console.error('User info is missing in response', res);
 				uni.showToast({ title: 'Login error: User info missing', icon: 'none' });
 				return;
 			}
@@ -91,23 +77,19 @@ const handleLogin = async () => {
 
 			uni.showToast({ title: 'Welcome Back!', icon: 'success' });
 
-			// 4. 跳转首页：通过 URL 参数告知首页弹出你的“引导卡片”
+			// 5. 跳转首页
 			setTimeout(() => {
-				// 严格检查 userInfo 是否存在，以及 is_profile_completed 属性
-				// 使用可选链 ?. (如果环境支持) 或者传统检查
-				const isCompleted = userInfo ? userInfo.is_profile_completed : 1;
-				
-				// 如果是 0，说明未完成资料
+				const isCompleted = userInfo.is_profile_completed;
+				// 如果是 0，跳转首页带 guide 参数
 				const url = (isCompleted === 0)
 					? '/pages/index/index?isNewUser=true'
 					: '/pages/index/index';
 					
 				uni.reLaunch({ url });
-			}, 1000);
+			}, 800);
 		} else {
-			uni.showToast({ title: res.message || 'Login failed', icon: 'none' });
+			uni.showToast({ title: res.msg || 'Login failed', icon: 'none' });
 		}
-
 	} catch (err: any) {
 		// 错误提示已由 request.ts 拦截器统一处理，这里不需要再弹窗
 		console.error('Login Error:', err);
@@ -123,118 +105,116 @@ const toRegister = () => {
 </script>
 
 <style lang="scss" scoped>
-/* 完全保留你提供的 UI 样式 */
 .login-container {
 	min-height: 100vh;
-	background-color: #1a5286;
-	padding: 60rpx 50rpx;
+	background-color: #ffffff; /* 纯白背景 */
 	display: flex;
 	flex-direction: column;
-	align-items: center;
-	position: relative;
+	justify-content: center;
+	padding: 0 40rpx;
 
-	.illustration-section {
-		height: 400rpx;
-		position: relative;
-		margin-top: 40rpx;
-
-		.main-char {
-			width: 350rpx;
-			height: 350rpx;
-		}
-	}
-
-	.slogan-section {
-		text-align: center;
-		margin: 60rpx 0;
-
-		.title {
-			font-size: 44rpx;
-			font-weight: 600;
-			color: #ffffff;
-			display: block;
-			letter-spacing: 1rpx;
-		}
-
-		.subtitle {
-			font-size: 26rpx;
-			color: rgba(255, 255, 255, 0.7);
-			margin-top: 15rpx;
-			display: block;
-		}
-	}
-
-	.form-section {
+	.content-wrapper {
 		width: 100%;
+	}
 
-		.input-wrap {
-			background-color: #ffffff;
-			height: 100rpx;
+	.header {
+		margin-bottom: 60rpx;
+		.title {
+			font-size: 56rpx;
+			font-weight: 800;
+			color: #4a4a4a; /* 深灰字体 */
+			display: block;
+			margin-bottom: 16rpx;
+		}
+		.subtitle {
+			font-size: 28rpx;
+			color: #999;
+		}
+	}
+
+	.auth-card {
+		background: #fff;
+		border-radius: 32rpx;
+		padding: 40rpx;
+		box-shadow: 0 10rpx 40rpx rgba(157, 132, 232, 0.15); /* 浅紫色阴影 */
+		border: 1px solid #f2effd; /* 极淡紫边框 */
+
+		.input-group {
+			background: #fbfaff; /* 极淡紫输入框背景 */
 			border-radius: 20rpx;
-			display: flex;
-			align-items: center;
-			padding: 0 30rpx;
-			margin-bottom: 30rpx;
+			padding: 10rpx 30rpx;
+			margin-bottom: 40rpx;
 
-			input {
-				flex: 1;
-				margin-left: 20rpx;
-				font-size: 28rpx;
-				color: #333;
+			.input-item {
+				display: flex;
+				align-items: center;
+				height: 100rpx;
+				
+				.icon {
+					margin-right: 20rpx;
+				}
+				
+				input {
+					flex: 1;
+					font-size: 30rpx;
+					color: #333;
+				}
+				
+				.placeholder {
+					color: #c4b5fd; /* 浅紫占位符 */
+				}
 			}
 
-			.placeholder-style {
-				color: #ccc;
+			.divider {
+				height: 2rpx;
+				background: #eee; // 保持灰色以免太花
+				margin: 0 10rpx;
 			}
 		}
 
-		.btn-camera-login {
-			background-color: #0c1c2c;
-			height: 110rpx;
-			border-radius: 55rpx;
+		.submit-btn {
+			background: linear-gradient(135deg, #b4a0f8 0%, #8e72dc 100%); /* 浅紫色渐变 */
+			color: #fff;
+			height: 96rpx;
+			border-radius: 48rpx;
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			color: #fff;
-			font-weight: 500;
-			margin-top: 50rpx;
-			border: none;
-
+			font-size: 32rpx;
+			font-weight: 600;
+			box-shadow: 0 8rpx 20rpx rgba(142, 114, 220, 0.3);
+			
+			text {
+				margin-right: 8rpx;
+			}
+			
 			&:active {
 				opacity: 0.9;
-				transform: scale(0.98);
-			}
-
-			text {
-				margin-left: 15rpx;
-			}
-		}
-
-		.register-link {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			margin-top: 40rpx;
-			color: #fff;
-			font-size: 28rpx;
-
-			text {
-				margin-left: 10rpx;
-				border-bottom: 1px solid #fff;
+				transform: scale(0.99);
 			}
 		}
 	}
 
-	.footer-links {
-		position: absolute;
-		bottom: 80rpx;
-		width: 80%;
+	.footer-actions {
 		display: flex;
-		justify-content: space-between;
-
-		.link {
+		justify-content: center;
+		align-items: center;
+		margin-top: 60rpx;
+		
+		.action-text {
+			font-size: 28rpx;
+			color: #8e72dc; /* 浅紫色链接 */
+			padding: 20rpx;
+			
+			&:active {
+				color: #6a53a8;
+			}
+		}
+		
+		.separator {
+			color: #ddd;
+			margin: 0 10rpx;
 			font-size: 24rpx;
-			color: rgba(255, 255, 255, 0.8);
 		}
 	}
 }

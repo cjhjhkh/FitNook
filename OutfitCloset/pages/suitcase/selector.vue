@@ -61,9 +61,9 @@
 							<van-icon name="success" color="#fff" size="14px" />
 						</view>
 
-                        <!-- 已装箱标记 -->
-                        <view class="existing-mark" v-if="existingClothesIds.has(item.id)">
-                            <text>已装箱</text>
+                        <!-- 已装箱标记 - 增加遮罩效果防止误点 -->
+                        <view class="existing-mask" v-if="existingClothesIds.has(item.id)">
+                            <view class="tag">已装箱</view>
                         </view>
 					</view>
 				</view>
@@ -132,7 +132,7 @@ import { ref, computed } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { getClothesList } from '@/api/clothes';
 import { getOutfitList } from '@/api/outfit';
-import { addSuitcaseContent, getSuitcaseDetail } from '@/api/suitcase';
+import { addContentToSuitcase, getSuitcaseDetail } from '@/api/suitcase';
 
 const suitcaseId = ref('');
 const activeTab = ref('clothes');
@@ -315,7 +315,7 @@ const confirmAdd = async () => {
 	submitting.value = true;
 
 	try {
-		const res: any = await addSuitcaseContent({
+		const res: any = await addContentToSuitcase({
             id: suitcaseId.value,
 			outfit_ids: Array.from(selectedOutfitIds.value),
             cloth_ids: Array.from(selectedClothesIds.value)
@@ -346,6 +346,7 @@ const confirmAdd = async () => {
 	display: flex;
 	flex-direction: column;
 	background-color: #f7f8fa;
+    overflow: hidden; /* 防止页面整体滚动 */
 }
 
 .selected-preview {
@@ -353,6 +354,7 @@ const confirmAdd = async () => {
     padding: 20rpx;
     border-bottom: 1rpx solid #eee;
     z-index: 11;
+    flex-shrink: 0;
     
     .preview-header {
         display: flex;
@@ -363,12 +365,14 @@ const confirmAdd = async () => {
         
         .clear-btn {
             color: #999;
+            padding: 0 10rpx;
         }
     }
     
     .preview-scroll {
         white-space: nowrap;
         width: 100%;
+        height: 90rpx;
         
         .preview-list {
             display: flex;
@@ -408,9 +412,9 @@ const confirmAdd = async () => {
 
 .fixed-header {
 	background: #fff;
-    position: sticky;
-    top: 0;
-	z-index: 10;
+    /* 移除 sticky，因为外层已经是 flex 布局 */
+    z-index: 10;
+    flex-shrink: 0;
 }
 
 .search-box {
@@ -419,11 +423,13 @@ const confirmAdd = async () => {
 
 .content-area {
 	flex: 1;
-	overflow-y: hidden;
+	overflow-y: auto; /* scroll-view 需要这个 */
+    height: 0; /* 配合 flex:1 确保滚动正确 */
 }
 
 .list-container {
 	padding: 24rpx;
+    padding-bottom: 120rpx; /* 防止内容被底部栏遮挡 */
 }
 
 .grid-layout {
@@ -439,19 +445,25 @@ const confirmAdd = async () => {
 	overflow: hidden;
 	aspect-ratio: 1;
     border: 2px solid transparent;
+    box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.03);
 
 	&.selected {
 		border-color: #8b5c47;
 	}
 
     &.is-existing {
-        opacity: 0.6;
-        background-color: #f5f5f5;
+        opacity: 0.8;
+        background-color: #f9f9f9;
+        
+        .item-img {
+            opacity: 0.6;
+        }
     }
 
 	.item-img {
 		width: 100%;
 		height: 100%;
+        display: block;
 	}
 	
 	.item-name {
@@ -459,10 +471,10 @@ const confirmAdd = async () => {
 		bottom: 0;
 		left: 0;
 		right: 0;
-		background: rgba(0,0,0,0.5);
+		background: rgba(0,0,0,0.6);
 		color: #fff;
 		font-size: 20rpx;
-		padding: 4rpx 8rpx;
+		padding: 6rpx 10rpx;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -479,19 +491,28 @@ const confirmAdd = async () => {
 		display: flex;
 		align-items: center;
 		justify-content: center;
+        z-index: 2;
+        box-shadow: 0 2rpx 4rpx rgba(0,0,0,0.2);
 	}
 
-    .existing-mark {
+    .existing-mask {
         position: absolute;
         top: 0;
+        left: 0;
         right: 0;
-        background: rgba(0,0,0,0.4);
-        padding: 4rpx 8rpx;
-        border-bottom-left-radius: 8rpx;
-        
-        text {
-            font-size: 20rpx;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1;
+        pointer-events: none; /* 让点击穿透，虽然我们在逻辑里拦截了 */
+
+        .tag {
+            background: rgba(0,0,0,0.6);
             color: #fff;
+            font-size: 20rpx;
+            padding: 4rpx 12rpx;
+            border-radius: 20rpx;
         }
     }
 }
@@ -510,6 +531,7 @@ const confirmAdd = async () => {
 	align-items: center;
     border: 2px solid transparent;
     position: relative;
+    box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.03);
     
     &.selected {
 		border-color: #8b5c47;
@@ -517,7 +539,8 @@ const confirmAdd = async () => {
 	}
 
     &.is-existing {
-         opacity: 0.6;
+         opacity: 0.8;
+         background: #f9f9f9;
     }
 
 	.outfit-img-box {
@@ -527,6 +550,7 @@ const confirmAdd = async () => {
 		border-radius: 8rpx;
 		overflow: hidden;
         margin-right: 20rpx;
+        flex-shrink: 0;
         
         .outfit-img {
             width: 100%;
@@ -548,12 +572,16 @@ const confirmAdd = async () => {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
+        overflow: hidden;
 
 		.title {
 			font-size: 28rpx;
 			font-weight: bold;
 			color: #333;
 			margin-bottom: 8rpx;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
 		}
 
 		.sub {
@@ -570,6 +598,8 @@ const confirmAdd = async () => {
 		display: flex;
 		align-items: center;
 		justify-content: center;
+        margin-left: 16rpx;
+        flex-shrink: 0;
         
         &.checked {
             background-color: #8b5c47;
@@ -583,7 +613,7 @@ const confirmAdd = async () => {
         top: 20rpx;
         font-size: 20rpx;
         color: #999;
-        background: #f0f0f0;
+        background: #eee;
         padding: 2rpx 8rpx;
         border-radius: 4rpx;
     }
@@ -591,12 +621,16 @@ const confirmAdd = async () => {
 
 .bottom-bar {
 	background: #fff;
-	padding: 20rpx 32rpx calc(20rpx + constant(safe-area-inset-bottom));
-    padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom));
+    /* 适配底部安全区 */
+	padding: 20rpx 32rpx;
+    padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
+    padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	box-shadow: 0 -2rpx 10rpx rgba(0,0,0,0.05);
+    z-index: 20;
+    flex-shrink: 0;
 
 	.selected-count {
 		font-size: 28rpx;
@@ -605,12 +639,13 @@ const confirmAdd = async () => {
 	}
 }
 
-.safe-area-bottom {
-    height: 50rpx;
-}
-
 .loading-state {
 	padding: 40rpx;
 	text-align: center;
+}
+
+.safe-area-bottom {
+	height: 0;
+    /* 这里的处理留给 padding-bottom */
 }
 </style>

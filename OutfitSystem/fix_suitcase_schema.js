@@ -30,13 +30,20 @@ async function fix() {
                 { name: 'destination', sql: "ALTER TABLE suitcases ADD COLUMN destination VARCHAR(255) DEFAULT ''" },
                 { name: 'start_date', sql: "ALTER TABLE suitcases ADD COLUMN start_date DATE DEFAULT NULL" },
                 { name: 'end_date', sql: "ALTER TABLE suitcases ADD COLUMN end_date DATE DEFAULT NULL" },
-                { name: 'items', sql: "ALTER TABLE suitcases ADD COLUMN items JSON DEFAULT NULL" }
+                { name: 'items', sql: "ALTER TABLE suitcases ADD COLUMN items JSON DEFAULT NULL" },
+                { name: 'outfits', sql: "ALTER TABLE suitcases ADD COLUMN outfits JSON DEFAULT NULL" },
+                { name: 'description', sql: "ALTER TABLE suitcases ADD COLUMN description TEXT DEFAULT NULL" },
+                { name: 'status', sql: "ALTER TABLE suitcases ADD COLUMN status VARCHAR(50) DEFAULT 'planning'" }
             ];
 
             for (const check of checks) {
                 if (!fields.includes(check.name)) {
                     console.log(`Missing column ${check.name}, adding...`);
-                    await db.query(check.sql);
+                    try {
+                        await db.query(check.sql);
+                    } catch(err) {
+                        console.error(`Failed to add column ${check.name}:`, err.message);
+                    }
                 }
             }
         }

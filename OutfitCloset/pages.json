@@ -37,6 +37,14 @@
 			}
 		},
 		{
+			"path": "pages/wardrobe/analysis",
+			"style": {
+				"navigationBarTitleText": "衣橱统计",
+				"navigationStyle": "default",
+				"backgroundColor": "#f7f8fa"
+			}
+		},
+		{
 			"path": "pages/chat/chat",
 			"style": {
 				"navigationBarTitleText": "AI 搭配师",
@@ -54,6 +62,12 @@
 			"path": "pages/outfit/index",
 			"style": {
 				"navigationBarTitleText": "搭配方案"
+			}
+		},
+		{
+			"path": "pages/outfit/list",
+			"style": {
+				"navigationBarTitleText": "所有搭配"
 			}
 		},
 		{
@@ -146,8 +160,43 @@
 			"style": {
 				"navigationBarTitleText": "个人中心"
 			}
+		},
+		{
+			"path": "pages/my/settings",
+			"style": {
+				"navigationBarTitleText": "设置",
+				"backgroundColor": "#f7f8fa"
+			}
+		},
+		{
+			"path": "pages/my/favorites",
+			"style": {
+				"navigationBarTitleText": "我的收藏",
+				"enablePullDownRefresh": true,
+				"backgroundColor": "#f7f8fa"
+			}
+		},
+		{
+			"path": "pages/social/index",
+			"style": {
+				"navigationBarTitleText": "穿搭社区",
+				"enablePullDownRefresh": true,
+				"backgroundColor": "#f7f8fa"
+			}
+		},
+		{
+			"path": "pages/social/publish",
+			"style": {
+				"navigationBarTitleText": "发布动态"
+			}
+		},
+		{
+			"path": "pages/social/detail",
+			"style": {
+				"navigationBarTitleText": "动态详情",
+				"navigationStyle": "custom"
+			}
 		}
-
 	],
 	"globalStyle": {
 		"navigationBarTextStyle": "black",
@@ -174,6 +223,7 @@
 			"van-checkbox-group": "/wxcomponents/vant/checkbox-group/index",
 			"van-skeleton": "/wxcomponents/vant/skeleton/index",
 			"van-empty": "/wxcomponents/vant/empty/index",
+			"van-loading": "/wxcomponents/vant/loading/index",
 			"van-nav-bar": "/wxcomponents/vant/nav-bar/index",
 			"van-tabs": "/wxcomponents/vant/tabs/index",
 			"van-tab": "/wxcomponents/vant/tab/index",
@@ -182,24 +232,32 @@
 	},
 	"tabBar": {
 		"color": "#7A7E83",
-		"selectedColor": "#1989fa",
+		"selectedColor": "#3cc51f",
 		"borderStyle": "black",
 		"backgroundColor": "#ffffff",
 		"list": [
 			{
 				"pagePath": "pages/index/index",
+				"iconPath": "static/tabbar/home.png",
+				"selectedIconPath": "static/tabbar/home-active.png",
 				"text": "首页"
 			},
 			{
 				"pagePath": "pages/wardrobe/index",
+				"iconPath": "static/tabbar/closet.png",
+				"selectedIconPath": "static/tabbar/closet-active.png",
 				"text": "衣橱"
 			},
 			{
 				"pagePath": "pages/outfit/index",
+				"iconPath": "static/tabbar/outfit.png",
+				"selectedIconPath": "static/tabbar/outfit-active.png",
 				"text": "穿搭"
 			},
 			{
 				"pagePath": "pages/my/index",
+				"iconPath": "static/tabbar/user.png",
+				"selectedIconPath": "static/tabbar/user-active.png",
 				"text": "我的"
 			}
 		]

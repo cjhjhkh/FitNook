@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const minioClient = require('../config/minio');
+const fs = require('fs');
+const path = require('path');
 const multer = require('multer');
 
 const upload = multer({
@@ -15,35 +16,31 @@ router.post('/', upload.single('file'), async (req, res) => {
             return res.status(400).json({ code: 400, msg: '未上传文件' });
         }
 
-        const bucketName = 'wardrobe';
-        // 使用时间戳+随机数生成文件名
-        const objectName = `snapshots/${Date.now()}-${Math.round(Math.random() * 1000)}.jpg`;
+        // 1. 获取业务类型（默认为 wardrobe）
+        const type = req.body.type || 'wardrobe';
+        const allowedTypes = ['wardrobe', 'avatar', 'diary'];
+        const subDir = allowedTypes.includes(type) ? type : 'wardrobe';
 
-        const metaData = {
-            'Content-Type': req.file.mimetype
-        };
-
-        // 上传到 MinIO
-        await minioClient.putObject(bucketName, objectName, req.file.buffer, req.file.size, metaData);
-        
-        // 获取可访问 URL
-        // 如果 minioClient 封装不同，这里可能需要调整，暂时假设直接拼接或使用 presigned
-        // 根据 clothes.js 的逻辑，似乎直接使用 client.getPublicUrl (如果封装了) 或自行拼接
-        // 这里为了稳健，复用 clothes.js 里的逻辑: publicUrl = minioClient.getPublicUrl...
-        // 假设 config/minio.js 导出的是原始 client，我们需要确认 helper 方法。
-        // 观察 clothes.js: const publicUrl = minioClient.getPublicUrl(bucketName, objectName);
-        // 说明 minioClient 实例上有这个扩展方法或者被 hack 了。我们照用。
-        
-        let publicUrl = '';
-        if (typeof minioClient.getPublicUrl === 'function') {
-            publicUrl = minioClient.getPublicUrl(bucketName, objectName);
-        } else {
-             // Fallback logic just in case
-             const protocol = minioClient.protocol || 'http';
-             const host = minioClient.host || 'localhost';
-             const port = minioClient.port ? `:${minioClient.port}` : '';
-             publicUrl = `${protocol}://${host}${port}/${bucketName}/${objectName}`;
+        // 2. 确保上传目录存在
+        // 存储在项目根目录下的 uploads/{type} 文件夹中
+        const uploadDir = path.join(__dirname, '..', 'uploads', subDir);
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
         }
+
+        // 3. 生成文件名
+        // 使用 type_ 前缀区分
+        const fileName = `${type}_${Date.now()}_${Math.round(Math.random() * 1000)}.jpg`;
+        const filePath = path.join(uploadDir, fileName);
+
+        // 4. 写入本地文件
+        fs.writeFileSync(filePath, req.file.buffer);
+        
+        // 5. 生成访问 URL
+        // 假设服务器运行在 localhost:3000，静态资源路径挂载在 /uploads
+        // 这个 HOST 最好是从配置文件或环境变量取，这里先写死本地地址
+        const HOST = 'http://localhost:3000'; 
+        const publicUrl = `${HOST}/uploads/${subDir}/${fileName}`;
 
         res.json({ code: 200, msg: '上传成功', url: publicUrl });
 

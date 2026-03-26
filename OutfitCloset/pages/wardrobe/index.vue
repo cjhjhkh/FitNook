@@ -29,6 +29,11 @@
                 <view class="layout-toggle" @tap="openTagManager" style="margin-left: 16rpx;">
                     <van-icon name="setting-o" size="22px" color="#666" />
                 </view>
+
+                <!-- 新增：统计分析入口 -->
+                <view class="layout-toggle" @tap="openAnalysis" style="margin-left: 16rpx;">
+                    <van-icon name="chart-trending-o" size="22px" color="#666" />
+                </view>
             </view>
         </view>
 
@@ -80,11 +85,6 @@
                                         size="18px" />
                                 </view>
                             </view>
-
-                            <view v-if="isSelectMode" class="check-overlay" @tap.stop="() => toggleSelectByTap(item.id)">
-                                <van-checkbox :name="item.id" icon-size="16px" shape="round"
-                                    :value="selectedIds.includes(item.id)" @change="bindSelectHandler(item.id)" />
-                            </view>
                         </view>
                         
                         <!-- 标签行：单行显示，超出省略 -->
@@ -107,11 +107,6 @@
                                     <van-icon v-if="selectedIds.includes(item.id)" name="success" color="#fff"
                                         size="18px" />
                                 </view>
-                            </view>
-
-                            <view v-if="isSelectMode" class="check-overlay-l" @tap.stop="() => toggleSelectByTap(item.id)">
-                                <van-checkbox :name="item.id" icon-size="18px" :value="selectedIds.includes(item.id)"
-                                    @change="bindSelectHandler(item.id)" />
                             </view>
                         </view>
                         <view class="cloth-details">
@@ -157,7 +152,8 @@
             </view>
         </view>
 
-        <view class="fab-add" @tap="showAddPopup = true">
+        <!-- 仅在非选择模式下显示新建按钮 -->
+        <view class="fab-add" @tap="showAddPopup = true" v-if="!isSelectMode">
             <van-icon name="plus" size="28px" color="#FFF" />
         </view>
 
@@ -386,8 +382,10 @@ onLoad((options: any) => {
 
 onShow(() => {
     // 每次显示页面刷新列表
-    loadClothesList(true);
-    fetchTagOptions();
+    // 优先加载选项，这对于反查 ID 是必须的
+    fetchTagOptions().then(() => {
+        handlePendingFilter();
+    });
 });
 
 onReachBottom(() => {
@@ -531,6 +529,10 @@ const openTagManager = () => {
     uni.navigateTo({ url: '/pages/wardrobe/tag-manager' });
 };
 
+const openAnalysis = () => {
+    uni.navigateTo({ url: '/pages/wardrobe/analysis' });
+};
+
 const handleCardTap = (item: any) => {
     if (isSelectMode.value) {
         toggleSelectByTap(item.id);
@@ -592,11 +594,47 @@ const openTagPopup = () => {
 };
 
 const fetchTagOptions = () => {
-    Promise.all([getCategories(), getScenes(), getSeasons()]).then(([resCat, resScene, resSeason]: any[]) => {
+    return Promise.all([getCategories(), getScenes(), getSeasons()]).then(([resCat, resScene, resSeason]: any[]) => {
         displayCategoryOptions.value = resCat.data || [];
         displaySceneOptions.value = resScene.data || [];
         displaySeasonOptions.value = resSeason.data || [];
     });
+};
+
+// 处理来自统计页面的筛选请求
+const handlePendingFilter = () => {
+    const categoryName = uni.getStorageSync('pending_filter_category');
+    
+    if (categoryName) {
+        // 清除标记
+        uni.removeStorageSync('pending_filter_category');
+        
+        // 查找对应的分类ID
+        const target = displayCategoryOptions.value.find((c: any) => c.name === categoryName);
+        if (target) {
+            // 重置并应用新筛选
+            filterForm.value = {
+                category_ids: [target.id],
+                scene_ids: [],
+                season_ids: [],
+                color: ''
+            };
+            
+            activeFilterTags.value = [{ 
+                type: 'category', 
+                id: target.id, 
+                name: target.name 
+            }];
+            
+            // 强制刷新列表
+            loadClothesList(true);
+            return;
+        }
+    }
+    
+    // 如果没有筛选请求，或者是页面首次进入/普通切换，则正常加载
+    // 这里我们可以加个判断，避免频繁请求，但在 onShow 里刷新通常是预期的
+    loadClothesList(true);
 };
 
 const toggleSelectOption = (type: string, id: number) => {
@@ -688,46 +726,71 @@ const onAddSelect = (e: any) => {
 // 处理上传逻辑
 const handleUpload = (sourceType: 'camera' | 'album') => {
     uni.chooseImage({
-        count: 1,
-        sizeType: ['original', 'compressed'],
+        count: 9, // 支持批量选择
+        sizeType: ['compressed'],
         sourceType: [sourceType],
         success: (res) => {
-            const tempFilePath = res.tempFilePaths[0];
-            doUpload(tempFilePath);
-        },
-        fail: (err) => {
-            console.log('选择图片取消或失败', err);
+            // 获取所有选中的图片路径
+            let tempFilePaths = res.tempFilePaths;
+            // 确保是数组
+            if (!Array.isArray(tempFilePaths)) {
+                // @ts-ignore
+                tempFilePaths = [tempFilePaths];
+            }
+            doBatchUpload(tempFilePaths as string[]);
         }
     });
 };
 
-const doUpload = (filePath: string) => {
-    uni.showLoading({ title: '正在入库...', mask: true });
-    uploadClothes(filePath).then((res: any) => {
-        uni.hideLoading();
-        if (res.code === 200) {
-            uni.showToast({ title: '录入成功', icon: 'success' });
-            // 上传成功后（假设后端返回了新创建的 ID），跳转到详情页进行编辑完善
-            // 假设回包结构是 res.data.id 或者 res.data 就是 id，根据 api/clothes.ts 里的解析
-            const newId = res.data.id || res.data; 
-            
-            // 延迟一点跳转，让用户看到成功提示
-            setTimeout(() => {
-                uni.navigateTo({ 
-                    url: `/pages/wardrobe/detail?id=${newId}&edit=true`
-                });
-            }, 800);
-            
-            // 刷新列表以便返回时能看到
-            loadClothesList(true);
-        } else {
-            uni.showToast({ title: res.message || '上传失败', icon: 'none' });
-        }
-    }).catch((err) => {
-        uni.hideLoading();
-        uni.showToast({ title: '网络异常，请重试', icon: 'none' });
-        console.error('Upload Error:', err);
+const doBatchUpload = async (filePaths: string[]) => {
+    if (!filePaths || filePaths.length === 0) return;
+
+    uni.showLoading({ title: `正在入库 0/${filePaths.length}`, mask: true });
+    
+    let successCount = 0;
+    let failCount = 0;
+
+    // 串行或并行上传均可，这里使用 Promise.all 并行上传以提高速度
+    // 如果图片过多导致并发问题，可以改用 for...of 串行
+    const uploadPromises = filePaths.map((filePath, index) => {
+        return uploadClothes(filePath)
+            .then(() => {
+                successCount++;
+                // 更新 loading 提示（注意：微信小程序频繁这类操作可能会闪烁，适度即可）
+                // uni.showLoading({ title: `正在入库 ${successCount}/${filePaths.length}`, mask: true });
+            })
+            .catch((err) => {
+                console.error('Upload Error:', err);
+                failCount++;
+            });
     });
+
+    try {
+        await Promise.all(uploadPromises);
+        
+        uni.hideLoading();
+        
+        // 结果反馈
+        if (failCount === 0) {
+            uni.showToast({ title: `成功入库 ${successCount} 件`, icon: 'success' });
+        } else if (successCount === 0) {
+            uni.showToast({ title: '全部上传失败', icon: 'none' });
+        } else {
+            uni.showToast({ title: `${successCount}件成功，${failCount}件失败`, icon: 'none' });
+        }
+
+        // 无论部分成功还是全部成功，都刷新列表
+        if (successCount > 0) {
+            loadClothesList(true);
+        }
+        
+        showAddPopup.value = false;
+
+    } catch (error) {
+        uni.hideLoading();
+        console.error('Batch Upload Error:', error);
+        uni.showToast({ title: '入库过程发生错误', icon: 'none' });
+    }
 };
 
 // 筛选标签（暂未实现逻辑）
@@ -844,12 +907,6 @@ const applyFilter = () => {
             
             &.active {
                 opacity: 1;
-                /* 选中时不放大整体，避免布局跳动过大 */
-                /* transform: scale(1.1); */
-                
-                .item-content {
-                    /* background-color removed */
-                }
             }
             
             .item-content {
@@ -999,13 +1056,6 @@ const applyFilter = () => {
                         font-size: 12px; 
                     }
                 }
-            }
-            
-            .check-overlay {
-                position: absolute;
-                bottom: 8rpx;
-                right: 8rpx;
-                z-index: 11;
             }
         }
         

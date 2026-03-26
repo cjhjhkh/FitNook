@@ -1,0 +1,1 @@
+const db = require('./OutfitSystem/config/db'); async function main() { try { const [rows] = await db.query('DESCRIBE favorites'); console.log(JSON.stringify(rows)); process.exit(0); } catch(e) { console.error(e); process.exit(1); } } main();

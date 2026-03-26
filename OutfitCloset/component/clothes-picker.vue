@@ -3,45 +3,66 @@
     :show="show"
     position="bottom"
     round
-    custom-style="height: 70%;"
+    custom-style="height: 75%; border-radius: 32rpx 32rpx 0 0; overflow: hidden;"
     @close="onClose"
   >
     <view class="picker-container">
+      <!-- 头部区域 -->
       <view class="picker-header">
-        <text class="title">选择单品</text>
-        <view class="actions">
-            <!-- 简单的分类筛选，为了简化暂只做 UI -->
-            <van-tag type="primary" plain style="margin-right: 10rpx;">全部</van-tag>
-            <van-tag plain>上装</van-tag>
+        <view class="header-top">
+            <text class="title">选择搭配单品</text>
+            <view class="close-btn" @tap="onClose" hover-class="btn-hover">
+                <van-icon name="cross" size="20" color="#999" />
+            </view>
         </view>
-        <van-icon name="cross" size="20" @click="onClose" color="#999" />
+        <view class="header-tabs">
+            <view class="tab-item active">全部</view>
+            <view class="tab-item">上装</view>
+            <view class="tab-item">下装</view>
+            <view class="tab-item">鞋靴</view>
+        </view>
       </view>
 
+      <!-- 列表区域 -->
       <scroll-view scroll-y class="picker-body" @scrolltolower="loadMore">
         <view class="grid-layout">
           <view 
             class="grid-item" 
             v-for="(item, index) in list" 
-            :key="item.id"
-            @click="selectItem(item)"
+            :key="item.id || index"
+            @tap="selectItem(item)"
           >
             <image :src="item.image_url" mode="aspectFill" class="item-img" />
-            <view class="item-name">{{ item.name }}</view>
-            <!-- 选中态遮罩 -->
-            <view class="selected-mask" v-if="selectedId === item.id">
-                <van-icon name="success" color="#fff" size="24" />
+            
+            <!-- 选中遮罩 -->
+            <transition name="fade">
+                <view class="selected-mask" v-if="selectedId === item.id">
+                    <view class="check-circle">
+                        <van-icon name="success" color="#fff" size="16" />
+                    </view>
+                </view>
+            </transition>
+            
+            <view class="item-info">
+                <text class="item-name">{{ item.name }}</text>
             </view>
           </view>
         </view>
         
         <view v-if="loading" class="loading-more">
-            <van-loading type="spinner" size="20px">加载中...</van-loading>
+            <van-loading type="spinner" size="24px" color="#1989fa" vertical>加载中...</van-loading>
         </view>
-        <van-empty v-if="!loading && list.length === 0" description="暂无单品" />
+        <view v-if="!loading && list.length === 0" class="empty-state">
+             <van-empty description="暂无单品，快去衣橱添加吧" />
+        </view>
       </scroll-view>
 
-      <view class="picker-footersafe">
-        <van-button type="info" block round @click="confirm">发送给 AI</van-button>
+      <!-- 底部按钮区 -->
+      <view class="picker-footer safe-area-bottom">
+        <view class="confirm-btn" :class="{ disabled: !selectedId }" @tap="confirm" hover-class="btn-active">
+            <text>发送给 AI 搭配师</text>
+            <van-icon name="share-o" style="margin-left: 8rpx;" />
+        </view>
       </view>
     </view>
   </van-popup>
@@ -67,7 +88,8 @@ const selectedItemData = ref<any>(null);
 // 监听显示，重置并加载数据
 watch(() => props.show, (val) => {
     if (val && list.value.length === 0) {
-        fetchData();
+        list.value = []; // 清空可能存在的旧数据? 其实保留也没事，这里选择保留缓存体验更好
+        if(list.value.length === 0) fetchData();
     }
 });
 
@@ -91,7 +113,11 @@ const fetchData = async () => {
             if (newItems.length < 20) {
                 finished.value = true;
             }
-            list.value = [...list.value, ...newItems];
+            // 简单去重，防止 key 重复报错
+            const existingIds = new Set(list.value.map(i => i.id));
+            const uniqueNewItems = newItems.filter((i:any) => !existingIds.has(i.id));
+            
+            list.value = [...list.value, ...uniqueNewItems];
             page.value++;
         }
     } catch (e) {
@@ -120,12 +146,12 @@ const selectItem = (item: any) => {
 };
 
 const confirm = () => {
-    if (!selectedId.value) {
-        uni.showToast({ title: '请先选择一件单品', icon: 'none' });
-        return;
-    }
+    if (!selectedId.value) return;
     emit('confirm', selectedItemData.value);
     onClose();
+    // 每次发送后重置选择
+    selectedId.value = null;
+    selectedItemData.value = null;
 };
 </script>
 
@@ -134,29 +160,68 @@ const confirm = () => {
     display: flex;
     flex-direction: column;
     height: 100%;
+    background: #fff;
 }
 
 .picker-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 30rpx;
-    border-bottom: 2rpx solid #eee;
+    flex-shrink: 0;
+    padding: 30rpx 30rpx 10rpx;
+    background: #fff;
+    z-index: 10;
+    
+    .header-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24rpx;
 
-    .title {
-        font-size: 32rpx;
-        font-weight: bold;
+        .title {
+            font-size: 34rpx;
+            font-weight: 700;
+            color: #333;
+        }
+        
+        .close-btn {
+            width: 60rpx;
+            height: 60rpx;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f7f8fa;
+            border-radius: 50%;
+            &.btn-hover { background: #eee; }
+        }
     }
-    .actions {
-        flex: 1;
-        margin-left: 20rpx;
+    
+    .header-tabs {
+        display: flex;
+        overflow-x: auto;
+        padding-bottom: 10rpx;
+        
+        .tab-item {
+            padding: 10rpx 28rpx;
+            background: #f5f6f8;
+            border-radius: 30rpx;
+            font-size: 26rpx;
+            color: #666;
+            margin-right: 20rpx;
+            white-space: nowrap;
+            transition: all 0.2s;
+            
+            &.active {
+                background: #eaf4fe;
+                color: #1989fa;
+                font-weight: 600;
+            }
+        }
     }
 }
 
 .picker-body {
     flex: 1;
     background: #f7f8fa;
-    padding: 20rpx;
+    padding: 24rpx;
+    box-sizing: border-box; 
 }
 
 .grid-layout {
@@ -169,27 +234,41 @@ const confirm = () => {
 .grid-item {
     position: relative;
     background: #fff;
-    border-radius: 12rpx;
+    border-radius: 16rpx;
     overflow: hidden;
-    height: 240rpx;
+    padding-bottom: 100%; /* 保持正方形 */
+    height: 0;
+    box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.04);
+    transition: transform 0.1s;
+    
+    &:active {
+        transform: scale(0.98);
+    }
     
     .item-img {
+        position: absolute;
+        top: 0;
+        left: 0;
         width: 100%;
         height: 100%;
     }
     
-    .item-name {
+    .item-info {
         position: absolute;
         bottom: 0;
         left: 0;
         right: 0;
-        background: rgba(0,0,0,0.5);
-        color: #fff;
-        font-size: 20rpx;
-        padding: 8rpx;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
+        padding: 20rpx 10rpx 10rpx;
+        
+        .item-name {
+            color: #fff;
+            font-size: 22rpx;
+            display: block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
     }
 
     .selected-mask {
@@ -198,23 +277,62 @@ const confirm = () => {
         left: 0; 
         right: 0; 
         bottom: 0;
-        background: rgba(25, 137, 250, 0.4);
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        background: rgba(25, 137, 250, 0.2);
         border: 4rpx solid #1989fa;
+        border-radius: 16rpx;
+        z-index: 2;
+        
+        .check-circle {
+            position: absolute;
+            top: 10rpx;
+            right: 10rpx;
+            width: 36rpx;
+            height: 36rpx;
+            background: #1989fa;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
     }
-}
-
-.picker-footersafe {
-    padding: 20rpx 30rpx 40rpx; 
-    background: #fff;
-    border-top: 2rpx solid #eee;
 }
 
 .loading-more {
     display: flex;
     justify-content: center;
-    padding: 20rpx;
+    padding: 30rpx;
+    align-items: center;
+}
+
+.picker-footer {
+    padding: 20rpx 30rpx;
+    padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
+    padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+    background: #fff;
+    border-top: 1rpx solid #f0f0f0;
+    
+    .confirm-btn {
+        height: 88rpx;
+        background: linear-gradient(135deg, #1989fa, #3a9efb);
+        border-radius: 44rpx;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 30rpx;
+        font-weight: 600;
+        box-shadow: 0 8rpx 20rpx rgba(25, 137, 250, 0.3);
+        transition: all 0.2s;
+        
+        &.disabled {
+            background: #e0e0e0;
+            box-shadow: none;
+            color: #999;
+        }
+        &.btn-active {
+            opacity: 0.9;
+            transform: scale(0.99);
+        }
+    }
 }
 </style>

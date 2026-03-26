@@ -52,7 +52,7 @@ import { ref } from 'vue';
 import { onLoad, onReachBottom, onShow } from '@dcloudio/uni-app';
 import { getOutfitList, deleteOutfit, addToCalendar } from '@/api/outfit';
 
-const mode = ref('view'); // 'view' | 'select'
+const mode = ref('view'); // 'view' | 'select' | 'select_one'
 const targetDate = ref('');
 const searchKeyword = ref('');
 const outfitList = ref<any[]>([]);
@@ -64,20 +64,23 @@ const hasMore = ref(true);
 const selectionMode = ref(false); // 是否处于选择模式
 
 onLoad((options: any) => {
-    if (options.mode === 'select') {
+    if (options.mode) {
+        mode.value = options.mode;
+    }
+
+    if (mode.value === 'select') {
         selectionMode.value = true;
         uni.setNavigationBarTitle({ title: '选择穿搭加入日历' });
+    } else if (mode.value === 'select_one') {
+        selectionMode.value = true;
+        uni.setNavigationBarTitle({ title: '选择一套搭配' });
+    } else {
+        uni.setNavigationBarTitle({ title: '我的搭配库' });
     }
+
     if (options.targetDate) {
         targetDate.value = options.targetDate;
     }
-    if (options.mode) {
-        mode.value = options.mode;
-        uni.setNavigationBarTitle({
-            title: options.mode === 'select' ? '选择穿搭' : '我的搭配库'
-        });
-    }
-    if (options.targetDate) targetDate.value = options.targetDate;
     refreshList();
 });
 
@@ -97,7 +100,15 @@ const loadData = async () => {
     
     loading.value = true;
     try {
-        const account = uni.getStorageSync('account');
+        const userInfo = uni.getStorageSync('userInfo');
+        const account = userInfo ? userInfo.account : '';
+        
+        if (!account) {
+            // 防止未登录导致死循环或错误调用
+            loading.value = false;
+            return;
+        }
+
         const params = {
             account, // API might need account to filter user's outfits
             page: page.value,
@@ -149,6 +160,14 @@ const goCreate = () => {
 
 const onItemClick = async (item: any) => {
     if (selectionMode.value) {
+        // 模式1: 社区发布/单选通用模式
+        if (mode.value === 'select_one') {
+            uni.$emit('outfitSelected', item); // 发送选中事件
+            uni.navigateBack();
+            return;
+        }
+
+        // 模式2: 日历多选模式
         if (!targetDate.value) {
             uni.showToast({ title: '参数缺失：日期', icon: 'none' });
             return;
@@ -157,7 +176,11 @@ const onItemClick = async (item: any) => {
         // 调用添加日历 API
         uni.showLoading({ title: '添加中...' });
         try {
+            const userInfo = uni.getStorageSync('userInfo');
+            const account = userInfo ? userInfo.account : '';
+            
             const res = await addToCalendar({
+                account: account,
                 outfit_id: item.id,
                 date: targetDate.value
             }) as any;

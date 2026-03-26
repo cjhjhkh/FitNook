@@ -19,6 +19,16 @@
 						<text>{{ dateStr }}</text>
 					</view>
 				</view>
+
+				<!-- 天气预报卡片 (Mock数据) -->
+				<view class="weather-card" v-if="detail.destination">
+					<view class="weather-left">
+						<van-icon name="cloud-o" size="24px" color="#9F7AEA" />
+						<text class="temperature">22°C ~ 28°C</text>
+					</view>
+					<text class="weather-tip">适宜穿着轻薄透气的衣物，早晚略凉。</text>
+				</view>
+
 				<view class="desc" v-if="detail.description" @tap="showEditPopup = true">
 					{{ detail.description }}
 				</view>
@@ -31,38 +41,41 @@
 		<!-- 进度条 -->
 		<view class="progress-section" v-if="detail && detail.items && detail.items.length > 0">
 			<view class="progress-info">
-				<text>装箱进度</text>
-				<text class="count">{{ checkedCount }}/{{ detail.items.length }}</text>
+				<view class="p-text">
+					<text class="label">装箱进度</text>
+					<text class="sub-label">已打包 {{ checkedCount }} 件，共 {{ detail.items.length }} 件</text>
+				</view>
+				<text class="percentage">{{ progressPercentage }}%</text>
 			</view>
-			<van-progress :percentage="progressPercentage" stroke-width="8" color="#1989fa" track-color="#e5e5e5" :show-pivot="false" />
+			<van-progress :percentage="progressPercentage" stroke-width="8" color="#9F7AEA" track-color="#f0f0f0" :show-pivot="false" />
 		</view>
 
 		<!-- 内容区域 -->
 		<view class="content-body">
-			<van-tabs :active="activeTab" @change="onTabChange" sticky animated swipeable color="#1989fa">
+			<van-tabs :active="activeTab" @change="onTabChange" sticky animated swipeable color="#9F7AEA">
 				<van-tab title="衣物清单">
 					<view class="list-container">
 						<view v-if="!detail || !detail.items || detail.items.length === 0" class="empty-state">
-							<van-empty description="还没添加衣物，快去添加吧" />
-							<van-button type="info" size="small" plain round @click="goToAddItems">去添加衣物</van-button>
+							<van-empty description="箱子还是空的" />
+							<van-button color="#9F7AEA" size="small" plain round @click="goToAddItems">去添加衣物</van-button>
 						</view>
-
+						
 						<view v-else class="items-grid">
-							<view v-for="(item, index) in detail.items" :key="item.cloth_id || index" 
-								class="cloth-item" :class="{ checked: item.checked }"
-								@tap="toggleCheck(index)">
+							<view v-for="(item, index) in detail.items" :key="item.cloth_id" 
+								class="cloth-item" 
+								:class="{ checked: item.checked }"
+								@tap="toggleCheck(Number(index))">
 								<view class="img-wrapper">
-									<image :src="item.image_url || '/static/logo.png'" mode="aspectFill" class="c-img" />
+									<image :src="item.image || item.image_url" mode="aspectFill" class="c-img" />
 									<view class="check-overlay" v-if="item.checked">
 										<van-icon name="success" color="#fff" size="20px" />
 									</view>
 								</view>
 								<view class="c-info">
-									<text class="c-name">{{ item.name || '未命名衣物' }}</text>
+									<text class="c-name">{{ item.name }}</text>
 								</view>
-								<!-- 删除按钮（长按或点击角落） -->
-								<view class="del-btn" @tap.stop="removeItem(index)">
-									<van-icon name="cross" size="12px" color="#fff" />
+								<view class="del-btn" @tap.stop="removeItem(Number(index))">
+									<van-icon name="cross" color="#fff" size="10px" />
 								</view>
 							</view>
 						</view>
@@ -73,7 +86,7 @@
 					<view class="outfit-container">
 						<view v-if="!detail || !detail.outfits_detail || detail.outfits_detail.length === 0" class="empty-state">
 							<van-empty description="还没规划搭配，去选几套吧" />
-							<van-button type="info" size="small" plain round @click="goToAddOutfits">去添加搭配</van-button>
+							<van-button color="#9F7AEA" size="small" plain round @click="goToAddOutfits">去添加搭配</van-button>
 						</view>
 
 						<view v-else class="outfit-list">
@@ -83,9 +96,13 @@
 								</view>
 								<view class="outfit-info">
 									<text class="o-name">{{ outfit.name || '未命名搭配' }}</text>
+									<view class="o-tags">
+										<van-tag plain type="primary" size="mini" v-if="outfit.season">{{ outfit.season }}</van-tag>
+										<van-tag plain type="success" size="mini" v-if="outfit.scene">{{ outfit.scene }}</van-tag>
+									</view>
 									<text class="o-sub">{{ outfit.items ? outfit.items.length + '件单品' : '' }}</text>
 								</view>
-								<view class="o-action" @tap.stop="removeOutfit(index)">
+								<view class="o-action" @tap.stop="removeOutfit(Number(index))">
 									<van-icon name="delete-o" size="18px" color="#999" />
 								</view>
 							</view>
@@ -113,25 +130,48 @@
 			<view class="popup-content">
 				<view class="popup-title">修改行程信息</view>
 				<van-cell-group>
-					<van-field :value="editForm.name" label="名称" placeholder="行程名称" @change="e => editForm.name = e.detail" />
-					<van-field :value="editForm.destination" label="目的地" placeholder="目的地" @change="e => editForm.destination = e.detail" />
+					<van-field :value="editForm.name" label="名称" placeholder="行程名称" @change="(e: any) => editForm.name = e.detail" />
+					<van-field :value="editForm.destination" label="目的地" placeholder="目的地" @change="(e: any) => editForm.destination = e.detail" />
 					<van-cell title="日期范围" :value="editDateDisplay" is-link @click="showCalendar = true" />
-					<van-field :value="editForm.description" label="备注" type="textarea" placeholder="填写备注..." autosize @change="e => editForm.description = e.detail" />
+					<van-field :value="editForm.description" label="备注" type="textarea" placeholder="填写备注..." autosize @change="(e: any) => editForm.description = e.detail" />
                     <van-cell title="当前状态">
                         <van-radio-group :value="editForm.status" direction="horizontal" @change="onStatusChange">
-                            <van-radio name="planning">计划中</van-radio>
-                            <van-radio name="departed">进行中</van-radio>
-                            <van-radio name="finished">已结束</van-radio>
+                            <van-radio name="planning" checked-color="#9F7AEA">计划中</van-radio>
+                            <van-radio name="departed" checked-color="#07c160">进行中</van-radio>
+                            <van-radio name="finished" checked-color="#c8c9cc">已结束</van-radio>
                         </van-radio-group>
                     </van-cell>
 				</van-cell-group>
 				<view class="popup-footer">
-					<van-button type="info" block round @click="handleUpdateInfo">保存修改</van-button>
+					<van-button color="#9F7AEA" block round @click="handleUpdateInfo">保 存</van-button>
 				</view>
 			</view>
         </van-popup>
         
-        <van-calendar :show="showCalendar" type="range" @close="showCalendar = false" @confirm="onCalendarConfirm" color="#1989fa" />
+        <!-- 搭配单品详情弹窗 -->
+        <van-popup :show="showOutfitItemsPopup" round position="bottom" custom-style="max-height: 70%" @close="showOutfitItemsPopup = false">
+            <view class="popup-content" v-if="currentOutfit">
+                <view class="popup-title">
+                    <text>{{ currentOutfit.name }}</text>
+                    <text class="sub-title">包含单品清单</text>
+                </view>
+                <view class="outfit-items-list">
+                    <view v-for="item in currentOutfit.items" :key="item.id" class="o-item-row">
+                        <image :src="item.image_url" mode="aspectFill" class="oi-img" />
+                        <text class="oi-name">{{ item.name }}</text>
+                        <!-- 检查该单品是否在行李箱item列表中 -->
+                        <van-tag v-if="isItemWaitToPack(item.id)" type="warning">待打包</van-tag>
+						<van-tag v-else-if="isItemPacked(item.id)" type="success">已装箱</van-tag>
+                        <van-tag v-else type="default">不在清单中</van-tag>
+                    </view>
+                </view>
+                 <view class="popup-footer">
+					<van-button color="#9F7AEA" block round @click="showOutfitItemsPopup = false">确 定</van-button>
+				</view>
+            </view>
+        </van-popup>
+
+        <van-calendar :show="showCalendar" type="range" @close="showCalendar = false" @confirm="onCalendarConfirm" color="#9F7AEA" />
 	</view>
 </template>
 
@@ -147,6 +187,8 @@ const suitcaseId = ref<string | number>('');
 const activeTab = ref(0);
 const showEditPopup = ref(false);
 const showCalendar = ref(false);
+const showOutfitItemsPopup = ref(false);
+const currentOutfit = ref<any>(null);
 
 // 编辑表单
 const editForm = ref({
@@ -209,8 +251,23 @@ const getStatusType = (status: string) => {
     return map[status] || 'primary';
 };
 
+// 检查单品打包状态辅助函数
+const isItemPacked = (clothId: number) => {
+	if (!detail.value || !detail.value.items) return false;
+	const found = detail.value.items.find((i: any) => i.cloth_id == clothId);
+	return found && found.checked;
+};
+
+const isItemWaitToPack = (clothId: number) => {
+	if (!detail.value || !detail.value.items) return false;
+	const found = detail.value.items.find((i: any) => i.cloth_id == clothId);
+	return found && !found.checked;
+};
+
 // 获取搭配封面图
 const getOutfitCover = (outfit: any) => {
+    // 0. 优先使用后端计算好的 cover 字段
+    if (outfit.cover) return outfit.cover;
     // 1. 优先使用合成图
     if (outfit.image_url) return outfit.image_url;
     // 2. 其次使用 cover_image 字段
@@ -259,7 +316,7 @@ onShow(() => {
 // 方法
 const loadDetail = async () => {
     try {
-        const res = await getSuitcaseDetail(suitcaseId.value);
+        const res: any = await getSuitcaseDetail(suitcaseId.value);
         if (res.code === 200) {
             detail.value = res.data;
             // 初始化编辑表单
@@ -321,18 +378,20 @@ const removeOutfit = async (index: number) => {
                 newOutfits.splice(index, 1);
                 
                 // 提取 id 数组用于保存
-                const outfitIds = newOutfits.map(o => o.id);
+                const outfitIds = newOutfits.map((o: any) => o.id);
                 
-                try {
+                 try {
                     await updateSuitcase({
                         id: suitcaseId.value,
                         outfits: outfitIds
                     });
-                     // 只在UI上移除，或者重新拉取
-                    detail.value.outfits_detail.splice(index, 1);
+                    
+                    // 重新加载详情以更新视图
+                    loadDetail();
+                    
                     uni.showToast({ title: '已移除', icon: 'none' });
                 } catch(e) {
-                    uni.showToast({ title: '移除失败', icon: 'none' });
+                     uni.showToast({ title: '移除失败', icon: 'none' });
                 }
             }
         }
@@ -362,8 +421,9 @@ const syncItems = async () => {
 // 编辑信息相关
 const onCalendarConfirm = (event: any) => {
     const [start, end] = event.detail;
-    editForm.value.start_date = start.toISOString();
-    editForm.value.end_date = end.toISOString();
+    // 格式化为 YYYY-MM-DD
+    editForm.value.start_date = start.toISOString().substring(0, 10);
+    editForm.value.end_date = end.toISOString().substring(0, 10);
     showCalendar.value = false;
 };
 
@@ -381,10 +441,10 @@ const goToAddOutfits = () => {
 };
 
 const previewOutfit = (outfit: any) => {
-    // 跳转到搭配详情页查看详情（只读模式）
-    uni.navigateTo({
-       url: `/pages/outfit/create?id=${outfit.id}&mode=view`
-    });
+    // 之前是跳转，现在改为弹窗显示包含的单品，方便核对
+    // 如果用户真的想看详情，可以在弹窗里再给个“去详情页”的链接
+    currentOutfit.value = outfit;
+    showOutfitItemsPopup.value = true;
 };
 
 const handleUpdateInfo = async () => {
@@ -459,7 +519,35 @@ const handleUpdateInfo = async () => {
         background: #f9f9f9;
         padding: 12rpx 16rpx;
         border-radius: 8rpx;
+        margin-top: 16rpx;
     }
+
+    .weather-card {
+		margin: 20rpx 0;
+		padding: 20rpx;
+		background: #f0f7ff;
+		border-radius: 12rpx;
+		display: flex;
+		flex-direction: column;
+		gap: 10rpx;
+
+		.weather-left {
+			display: flex;
+			align-items: center;
+			gap: 16rpx;
+			
+			.temperature {
+				font-size: 30rpx;
+				font-weight: 500;
+				color: #333;
+			}
+		}
+
+		.weather-tip {
+			font-size: 24rpx;
+			color: #666;
+		}
+	}
 
     .edit-btn {
         position: absolute;
@@ -471,19 +559,36 @@ const handleUpdateInfo = async () => {
 
 .progress-section {
 	background: #fff;
-	padding: 20rpx 32rpx 32rpx;
+	padding: 24rpx 32rpx 32rpx;
 	margin-bottom: 20rpx;
+    box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.02);
 	
 	.progress-info {
 		display: flex;
 		justify-content: space-between;
-		font-size: 26rpx;
-		color: #666;
-		margin-bottom: 12rpx;
+		align-items: flex-end;
+		margin-bottom: 16rpx;
+        
+        .p-text {
+            display: flex;
+            flex-direction: column;
+            
+            .label {
+                font-size: 28rpx;
+                font-weight: bold;
+                color: #333;
+                margin-bottom: 4rpx;
+            }
+            .sub-label {
+                font-size: 22rpx;
+                color: #999;
+            }
+        }
 		
-		.count {
-			color: #1989fa;
+		.percentage {
+			color: #9F7AEA;
 			font-weight: bold;
+            font-size: 36rpx;
 		}
 	}
 }
@@ -533,7 +638,7 @@ const handleUpdateInfo = async () => {
 				left: 0;
 				right: 0;
 				bottom: 0;
-				background: rgba(25, 137, 250, 0.6);
+				background: rgba(159, 122, 234, 0.6);
 				display: flex;
 				align-items: center;
 				justify-content: center;
@@ -569,7 +674,7 @@ const handleUpdateInfo = async () => {
 		
 		&.checked {
 			.img-wrapper {
-				border: 4rpx solid #1989fa;
+				border: 4rpx solid #9F7AEA;
 			}
 			.c-name {
 				color: #999;
@@ -598,17 +703,17 @@ const handleUpdateInfo = async () => {
     .outfit-card {
 		background: #fff;
 		border-radius: 16rpx;
-		box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.05);
+		box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.04);
 		padding: 20rpx;
 		display: flex;
 		align-items: center;
-		border: 1rpx solid #eee;
+		border: 1rpx solid #f5f5f5;
 		position: relative;
 		
 		.outfit-cover {
-			width: 120rpx;
-			height: 120rpx;
-			border-radius: 8rpx;
+			width: 140rpx;
+			height: 140rpx;
+			border-radius: 12rpx;
 			overflow: hidden;
 			background: #f0f0f0;
 			margin-right: 20rpx;
@@ -624,6 +729,8 @@ const handleUpdateInfo = async () => {
 			display: flex;
 			flex-direction: column;
 			gap: 8rpx;
+            height: 140rpx;
+            padding: 4rpx 0;
 			
 			.o-name {
 				font-size: 30rpx;
@@ -631,9 +738,15 @@ const handleUpdateInfo = async () => {
 				color: #333;
 			}
 			
+            .o-tags {
+                display: flex;
+                gap: 8rpx;
+            }
+
 			.o-sub {
 				font-size: 24rpx;
 				color: #999;
+                margin-top: auto;
 			}
 		}
 		
@@ -687,10 +800,47 @@ const handleUpdateInfo = async () => {
     
     .popup-title {
 		text-align: center;
-		font-size: 32rpx;
-		font-weight: bold;
 		padding: 30rpx 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8rpx;
+        font-size: 32rpx;
+        font-weight: bold;
+
+        .sub-title {
+            font-size: 24rpx;
+            font-weight: normal;
+            color: #999;
+        }
 	}
+
+    .outfit-items-list {
+        padding: 0 30rpx;
+        flex: 1;
+        overflow-y: auto;
+        
+        .o-item-row {
+            display: flex;
+            align-items: center;
+            padding: 20rpx 0;
+            border-bottom: 1rpx solid #f5f5f5;
+            
+            .oi-img {
+                width: 80rpx;
+                height: 80rpx;
+                border-radius: 8rpx;
+                background: #f5f5f5;
+                margin-right: 20rpx;
+            }
+            
+            .oi-name {
+                flex: 1;
+                font-size: 28rpx;
+                color: #333;
+            }
+        }
+    }
 	
 	.popup-footer {
 		margin-top: auto;

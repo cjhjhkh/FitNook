@@ -4,7 +4,16 @@
 
 // utils/request.ts
 
-export const BASE_URL = 'http://localhost:3000/api'; // 统一管理后端地址
+export const HOST = 'http://localhost:3000';
+export const BASE_URL = HOST + '/api'; // 统一管理后端地址
+
+// 导出获取 headers 的方法，供流式请求使用
+export const getAuthHeader = () => {
+    const token = uni.getStorageSync('token');
+    return {
+        'Authorization': token ? `Bearer ${token}` : ''
+    };
+};
 
 export const request = (options: UniApp.RequestOptions) => {
     // 1. 从缓存中获取 Token
@@ -16,7 +25,7 @@ export const request = (options: UniApp.RequestOptions) => {
             url: BASE_URL + options.url, // 拼接路径
             header: {
                 ...options.header,
-                'Authorization': token ? `Bearer ${token}` : '' // 自动携带 Token
+                ...getAuthHeader() // 复用逻辑
             },
             success: (res: any) => {
                 // 2. 状态码判断（根据你后端的约定修改）
@@ -45,3 +54,5 @@ export const request = (options: UniApp.RequestOptions) => {
         });
     });
 };
+
+export default request;

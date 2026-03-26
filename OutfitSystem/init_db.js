@@ -174,6 +174,83 @@ async function initDB() {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='行李箱行程表';
         `);
 
+        // 3.3 社区互动 (新加)
+        await connection.query(`
+            CREATE TABLE posts (
+                id bigint NOT NULL AUTO_INCREMENT COMMENT '帖子ID',
+                user_id bigint NOT NULL COMMENT '发布者ID',
+                title varchar(100) DEFAULT NULL COMMENT '标题(可选)',
+                content text COMMENT '正文内容',
+                image_urls json DEFAULT NULL COMMENT '图片列表JSONArray',
+                outfit_id bigint DEFAULT NULL COMMENT '关联穿搭ID',
+                status enum('draft','published','hidden') DEFAULT 'published' COMMENT '状态',
+                view_count int DEFAULT 0 COMMENT '浏览量',
+                like_count int DEFAULT 0 COMMENT '点赞数',
+                comment_count int DEFAULT 0 COMMENT '评论数',
+                collect_count int DEFAULT 0 COMMENT '收藏数',
+                created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY idx_posts_user (user_id),
+                CONSTRAINT fk_posts_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+                CONSTRAINT fk_posts_outfit FOREIGN KEY (outfit_id) REFERENCES outfits (id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='社区帖子表';
+        `);
+
+        await connection.query(`
+            CREATE TABLE comments (
+                id bigint NOT NULL AUTO_INCREMENT,
+                post_id bigint NOT NULL COMMENT '帖子ID',
+                user_id bigint NOT NULL COMMENT '评论者ID',
+                parent_id bigint DEFAULT NULL COMMENT '父评论ID',
+                content text NOT NULL COMMENT '评论内容',
+                created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY idx_comments_post (post_id),
+                CONSTRAINT fk_comments_post FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE,
+                CONSTRAINT fk_comments_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='帖子评论表';
+        `);
+
+        await connection.query(`
+            CREATE TABLE likes (
+                id bigint NOT NULL AUTO_INCREMENT,
+                user_id bigint NOT NULL,
+                target_id bigint NOT NULL COMMENT '目标ID(帖子ID/评论ID)',
+                target_type enum('POST','COMMENT') DEFAULT 'POST',
+                created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                UNIQUE KEY uniq_user_target (user_id, target_id, target_type),
+                CONSTRAINT fk_likes_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='点赞记录表';
+        `);
+        
+        await connection.query(`
+            CREATE TABLE collections (
+                id bigint NOT NULL AUTO_INCREMENT,
+                user_id bigint NOT NULL,
+                post_id bigint NOT NULL COMMENT '帖子ID',
+                created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                UNIQUE KEY uniq_user_post (user_id, post_id),
+                CONSTRAINT fk_col_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+                CONSTRAINT fk_col_post FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='灵感收藏/转存表';
+        `);
+
+        await connection.query(`
+            CREATE TABLE follows (
+                id bigint NOT NULL AUTO_INCREMENT,
+                follower_id bigint NOT NULL COMMENT '粉丝ID',
+                following_id bigint NOT NULL COMMENT '被关注者ID',
+                created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                UNIQUE KEY uniq_follow (follower_id, following_id),
+                CONSTRAINT fk_follow_follower FOREIGN KEY (follower_id) REFERENCES users (id) ON DELETE CASCADE,
+                CONSTRAINT fk_follow_following FOREIGN KEY (following_id) REFERENCES users (id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户关注表';
+        `);
+
         // 4. 预填数据
         console.log('🌱 正在写入初始数据...');
 

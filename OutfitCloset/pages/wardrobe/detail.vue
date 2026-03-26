@@ -69,6 +69,12 @@
                 </view>
 
                 <view class="bottom-bar">
+                    <!-- 新增收藏按钮 -->
+                    <view class="fav-action" @click="onToggleFavorite">
+                        <van-icon :name="isFavorite ? 'star' : 'star-o'" :color="isFavorite ? '#ffd21e' : '#646566'" size="24px" />
+                        <text class="text">{{ isFavorite ? '已收藏' : '收藏' }}</text>
+                    </view>
+
                     <button class="action-btn delete-btn" @click="handleDelete">
                         <van-icon name="delete-o" /> 删除单品
                     </button>
@@ -158,9 +164,12 @@ import {
     getScenes, 
     getSeasons 
 } from '@/api/clothes';
+import { checkFavorite, addFavorite, removeFavorite } from '@/api/favorites';
 
 const details = ref<any>(null);
 const loading = ref(true);
+const isFavorite = ref(false); // 收藏状态
+const userInfo = ref<any>(uni.getStorageSync('userInfo'));
 
 // 编辑相关状态
 const showEdit = ref(false);
@@ -200,6 +209,9 @@ const editPerWearPrice = computed(() => {
 onLoad((options) => {
     // 调试用：确认是否收到 ID
     console.log('收到页面参数:', options);
+    // 更新用户信息，确保是最新的
+    userInfo.value = uni.getStorageSync('userInfo');
+    
     const clothesId = options?.id;
     if (clothesId) {
         // 如果传递了 edit=true，则在加载详情后自动打开编辑框
@@ -218,6 +230,10 @@ const fetchClothesDetail = (id: string, autoEdit = false) => {
         if (res.code === 200) {
             // 注意：Vue3 setup 中直接给 ref 赋值，不使用 this
             details.value = res.data;
+
+            // 获取详情成功后，检查收藏状态
+            checkFavStatus(details.value.id);
+            
             if (autoEdit) {
                 handleEdit();
             }
@@ -229,6 +245,59 @@ const fetchClothesDetail = (id: string, autoEdit = false) => {
     }).finally(() => {
         loading.value = false;
     });
+};
+
+// 检查收藏状态
+const checkFavStatus = async (itemId: number) => {
+    if (!userInfo.value || !userInfo.value.id) return;
+    try {
+        const res: any = await checkFavorite(userInfo.value.id, 'clothing', itemId);
+        if (res.code === 200) {
+            isFavorite.value = res.data.is_favorite;
+        }
+    } catch (e) {
+        console.error('检查收藏状态失败', e);
+    }
+};
+
+// 切换收藏
+const onToggleFavorite = async () => {
+    if (!userInfo.value || !userInfo.value.id) {
+        uni.showToast({ title: '请先登录', icon: 'none' });
+        return;
+    }
+    
+    uni.showLoading({ mask: true });
+    
+    try {
+        if (isFavorite.value) {
+            // 取消收藏
+            const res: any = await removeFavorite({
+                userId: userInfo.value.id,
+                itemType: 'clothing',
+                itemId: details.value.id
+            });
+            if (res.code === 200) {
+                isFavorite.value = false;
+                uni.showToast({ title: '已取消收藏', icon: 'none' });
+            }
+        } else {
+            // 添加收藏
+            const res: any = await addFavorite({
+                userId: userInfo.value.id,
+                itemType: 'clothing',
+                itemId: details.value.id
+            });
+            if (res.code === 200) {
+                isFavorite.value = true;
+                uni.showToast({ title: '收藏成功', icon: 'success' });
+            }
+        }
+    } catch (e) {
+        uni.showToast({ title: '操作失败', icon: 'none' });
+    } finally {
+        uni.hideLoading();
+    }
 };
 
 // --- 功能操作 ---
@@ -467,9 +536,27 @@ $morandi-text: #5E6D82;
         height: 100rpx;
         background: #fff;
         display: flex;
+        align-items: center; // 垂直居中
         padding: 10rpx 30rpx;
         padding-bottom: env(safe-area-inset-bottom);
         border-top: 1rpx solid #ebedf0;
+        box-shadow: 0 -2rpx 10rpx rgba(0,0,0,0.03); // 加点阴影
+
+        // 新增收藏按钮样式
+        .fav-action {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-right: 30rpx;
+            min-width: 80rpx;
+            
+            .text {
+                font-size: 20rpx;
+                color: #646566;
+                margin-top: 4rpx;
+            }
+        }
 
         .action-btn {
             flex: 1;

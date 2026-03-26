@@ -63,10 +63,10 @@ router.post('/login', async (req, res) => {
     const { account, password } = req.body;
 
     try {
-        // 1. 根据账号找人 (联表查询获取昵称和画像信息)
-        // 增加查询 style_preference 以判断资料是否完善
+        // 1. 根据账号找人 (联表查询获取全量画像信息)
         const [rows] = await db.query(`
-            SELECT u.*, p.nickname, p.avatar_url, p.style_preference
+            SELECT u.*, p.nickname, p.avatar_url, p.gender, p.birthday, p.signature, 
+                   p.height, p.weight, p.body_shape, p.skin_tone, p.style_preference
             FROM users u 
             LEFT JOIN user_profiles p ON u.id = p.user_id 
             WHERE u.account = ?
@@ -103,6 +103,14 @@ router.post('/login', async (req, res) => {
                 account: user.account,
                 nickname: user.nickname || `用户${user.account}`,
                 avatar_url: user.avatar_url,
+                gender: user.gender,
+                birthday: user.birthday,
+                signature: user.signature,
+                height: user.height,
+                weight: user.weight,
+                body_shape: user.body_shape,
+                skin_tone: user.skin_tone,
+                style_preference: user.style_preference,
                 is_profile_completed: isProfileCompleted
             }
         });
@@ -118,15 +126,7 @@ router.post('/login', async (req, res) => {
  */
 router.put('/profile', async (req, res) => {
     // 1. 获取前端传来的数据
-    const { 
-        account, 
-        nickname, 
-        gender, 
-        height, 
-        weight, 
-        body_shape, 
-        style_preference 
-    } = req.body;
+    const { account } = req.body;
 
     if (!account) {
         return res.json({ code: 400, msg: '参数错误：账号不能为空' });
@@ -144,26 +144,38 @@ router.put('/profile', async (req, res) => {
         }
         const userId = userRows[0].id;
 
-        // 3. 更新 user_profiles 表
-        const updateProfileSql = `
-            UPDATE user_profiles 
-            SET nickname = ?, 
-                gender = ?, 
-                height = ?, 
-                weight = ?, 
-                body_shape = ?, 
-                style_preference = ?
-            WHERE user_id = ?
-        `;
-        await connection.query(updateProfileSql, [
-            nickname || null, 
-            gender || 'SECRET', 
-            height || null, 
-            weight || null, 
-            body_shape || null, 
-            style_preference || null, 
-            userId
-        ]);
+        // 3. 动态构建 SQL 更新语句 (支持 avatar_url 且只更新传入的字段)
+        const updateFields = [];
+        const updateValues = [];
+
+        // 映射字段名与数据库列名 (key: req.body 字段, value: db 列名)
+        // 注意：前端传来的空字符串转为 null
+        const fieldMap = {
+            nickname: 'nickname',
+            gender: 'gender',
+            height: 'height',
+            weight: 'weight',
+            body_shape: 'body_shape',
+            style_preference: 'style_preference',
+            skin_tone: 'skin_tone',
+            signature: 'signature',
+            birthday: 'birthday',
+            avatar_url: 'avatar_url'
+        };
+
+        for (const [key, col] of Object.entries(fieldMap)) {
+            if (req.body[key] !== undefined) {
+                updateFields.push(`${col} = ?`);
+                const val = req.body[key];
+                updateValues.push(val === '' ? null : val);
+            }
+        }
+
+        if (updateFields.length > 0) {
+            const updateSql = `UPDATE user_profiles SET ${updateFields.join(', ')} WHERE user_id = ?`;
+            updateValues.push(userId);
+            await connection.execute(updateSql, updateValues);
+        }
 
         await connection.commit();
         res.json({

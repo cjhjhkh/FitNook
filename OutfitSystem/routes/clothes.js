@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
-const minioClient = require('../config/minio');
+const fs = require('fs');
+const path = require('path');
 const multer = require('multer');
 const axios = require('axios');
 
@@ -27,16 +28,19 @@ const getTagId = async (connection, names, type) => {
     return rows.length > 0 ? rows[0].tag_id : null;
 };
 
-// helper: 给 minio 上传加超时保护
-const putObjectWithTimeout = (bucket, objectName, buffer, ms = 60000) => {
-    console.log(`[MinIO] 开始上传: ${objectName}, 大小: ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
-    return Promise.race([
-        minioClient.putObject(bucket, objectName, buffer).then((res) => {
-            console.log(`[MinIO] 上传完成: ${objectName}`);
-            return res;
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error(`MinIO 上传超时 (${ms / 1000}s)`)), ms))
-    ]);
+// helper: 保存文件到本地磁盘 (替代 MinIO)
+const saveFileLocally = async (buffer, filename) => {
+    // 确保目录存在
+    const uploadDir = path.join(__dirname, '..', 'uploads', 'wardrobe');
+    if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const filePath = path.join(uploadDir, filename);
+    await fs.promises.writeFile(filePath, buffer);
+    
+    // 返回相对路径或完整 URL，这里返回文件名，后续拼接
+    return filename;
 };
 
 /**
@@ -69,16 +73,23 @@ router.post('/add', upload.single('image'), async (req, res) => {
 
         if (!fileBuffer || !account) return res.status(400).json({ msg: '参数不完整' });
 
-        const bucketName = 'wardrobe';
-        const objectName = `${account}/${Date.now()}-${(req.file && req.file.originalname) || 'remote.jpg'}`;
+        // 修改：使用本地文件名生成规则 (去除 account 目录，扁平化存储，或者保持结构但需手动建文件夹)
+        // 为了简单，尽量扁平化：account_timestamp_random.jpg
+        const fileName = `${account}_${Date.now()}_${(req.file && req.file.originalname) || 'remote'}.jpg`;
+        // 清理文件名中的特殊字符
+        const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '');
 
         const connection = await db.getConnection();
         try {
             await connection.beginTransaction();
 
-            // 1. 上传图片到 MinIO
-            await putObjectWithTimeout(bucketName, objectName, fileBuffer, 60000);
-            const publicUrl = minioClient.getPublicUrl(bucketName, objectName);
+            // 1. 保存到本地
+            await saveFileLocally(fileBuffer, safeFileName);
+            
+            // 生成本地访问 URL
+            // HOST 同样建议写死或配置，适配本地环境
+            const HOST = 'http://localhost:3000';
+            const publicUrl = `${HOST}/uploads/wardrobe/${safeFileName}`;
 
             // 2. 获取用户 ID
             const [userRows] = await connection.query('SELECT id FROM users WHERE account = ?', [account]);
@@ -527,13 +538,12 @@ router.put('/update/:id', async (req, res) => {
 
 /**
  * [批量删除]
- * 适配新表结构：级联删除会自动处理关联表，但 MinIO 清理逻辑需保留
+ * 适配新表结构：级联删除会自动处理关联表，但本地文件清理逻辑需保留
  */
 router.post('/batch-delete', async (req, res) => {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ msg: '参数错误' });
 
-    const bucketName = 'wardrobe';
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -544,20 +554,25 @@ router.post('/batch-delete', async (req, res) => {
         // 2. 删除主表数据 (数据库设置了 ON DELETE CASCADE，会自动删除 entity_tag_relation)
         await connection.query('DELETE FROM clothes WHERE id IN (?)', [ids]);
 
-        // 3. 清理 MinIO 文件
-
-        // 3. 清理 MinIO 文件
+        // 3. 清理本地文件
         if (rows.length > 0) {
-            const objectNames = rows.map(r => {
+            rows.forEach(r => {
                 try {
-                    const urlObj = new URL(r.image_url);
-                    return urlObj.pathname.replace(new RegExp(`^/${bucketName}/`), '');
-                } catch (e) { return null; }
-            }).filter(n => n);
-
-            if (objectNames.length > 0) {
-                await minioClient.removeObjects(bucketName, objectNames);
-            }
+                    if (!r.image_url) return;
+                    // 解析文件名
+                    // 假设 URL 格式是 http://localhost:3000/uploads/wardrobe/xxx.jpg
+                    const urlParts = r.image_url.split('/uploads/wardrobe/');
+                    if (urlParts.length === 2) {
+                        const fileName = urlParts[1];
+                        const filePath = path.join(__dirname, '..', 'uploads', 'wardrobe', fileName);
+                        if (fs.existsSync(filePath)) {
+                            fs.unlinkSync(filePath);
+                        }
+                    }
+                } catch (e) {
+                    console.error('清理本地文件失败:', e.message);
+                }
+            });
         }
 
         await connection.commit();
@@ -576,7 +591,6 @@ router.post('/batch-delete', async (req, res) => {
  */
 router.delete('/delete/:id', async (req, res) => {
     const { id } = req.params;
-    const bucketName = 'wardrobe';
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -591,10 +605,16 @@ router.delete('/delete/:id', async (req, res) => {
 
         if (rows.length > 0 && rows[0].image_url) {
             try {
-                const urlObj = new URL(rows[0].image_url);
-                const objectName = urlObj.pathname.replace(new RegExp(`^/${bucketName}/`), '');
-                if (objectName) await minioClient.removeObject(bucketName, objectName);
-            } catch (e) { }
+                // 修改：本地文件删除逻辑
+                const urlParts = rows[0].image_url.split('/uploads/wardrobe/');
+                if (urlParts.length === 2) {
+                    const fileName = urlParts[1];
+                    const filePath = path.join(__dirname, '..', 'uploads', 'wardrobe', fileName);
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                    }
+                }
+            } catch (e) { console.error('删除本地图片失败', e); }
         }
 
         await connection.commit();

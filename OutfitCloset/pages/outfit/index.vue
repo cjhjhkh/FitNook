@@ -3,7 +3,7 @@
 		<!-- 顶部操作栏 -->
 		<view class="header-bar">
 			<view class="search-box">
-				<van-search :value="keyword" placeholder="搜索搭配灵感" shape="round" background="transparent"
+				<van-search :value="keyword" placeholder="搜索我的搭配" shape="round" background="transparent"
 					@change="onSearchChange" @search="loadOutfits" />
 			</view>
 			<view class="action-icons">
@@ -34,7 +34,7 @@
 		<scroll-view scroll-y class="content-area" @scrolltolower="onLoadMore" enable-flex>
 			<view class="outfit-list">
 				<!-- 新建卡片 (始终显示在第一个) -->
-				<view class="outfit-card create-card" @tap="goToCreate">
+				<view class="outfit-card create-card" @tap="goToCreate" v-if="!isSelectMode">
 					<view class="dashed-box">
 						<view class="plus-icon-circle">
 							<van-icon name="plus" size="24px" color="#fff" />
@@ -111,13 +111,13 @@
 			<view class="safe-bottom"></view>
 		</scroll-view>
 
-        <!-- 底部操作栏 (仅在选择模式下显示) -->
-		<view v-if="isSelectMode" class="bottom-action-bar safe-area-inset-bottom">
-			<view class="selected-info">
+        <!-- 底部操作栏 (仅在多选模式下显示) -->
+		<view v-if="isSelectMode && !isSingleSelect" class="batch-bar safe-area-inset-bottom animate-slide-up">
+			<view class="batch-info">
 				已选 {{ selectedIds.length }} 套搭配
 			</view>
-			<view class="confirm-btn" @tap="confirmSelection">
-				<van-icon name="check" size="18px" />
+			<view class="batch-btn" @tap="confirmSelection">
+				<van-icon name="check" size="18px" color="#FFF" />
 				<text>确认添加</text>
 			</view>
 		</view>
@@ -129,11 +129,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
 // @ts-ignore
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app';
-import { getOutfitList } from '@/api/outfit';
-import { getSuitcaseDetail, updateSuitcase, addSuitcaseContent } from '@/api/suitcase';
+import { getOutfitList, addToCalendar } from '@/api/outfit';
+import { addSuitcaseContent } from '@/api/suitcase';
 
 // --- 类型定义 ---
 interface OutfitItem {
@@ -175,16 +175,34 @@ const finished = ref(false);
 
 // 选择模式状态
 const isSelectMode = ref(false);
+const isSingleSelect = ref(false); // 新增：是否单选模式
 const selectionTargetId = ref('');
 const selectedIds = ref<number[]>([]);
+const mode = ref('view'); // view: 查看模式, select_one: 单选模式
+const targetDate = ref(''); // 新增：日历模式下的目标日期
 
-// --- 生命周期 ---
 onLoad((options: any) => {
-    if (options.mode === 'select') {
-        isSelectMode.value = true;
-        selectionTargetId.value = options.targetId || '';
-        uni.setNavigationBarTitle({ title: '选择搭配' });
-        uni.hideTabBar();
+    if (options) {
+        mode.value = options.mode || 'view';
+
+        if (mode.value === 'select' || mode.value === 'select_one') {
+            isSelectMode.value = true;
+            selectionTargetId.value = options.targetId || '';
+            
+            if (mode.value === 'select_one') {
+                isSingleSelect.value = true;
+                uni.setNavigationBarTitle({ title: '选择一套搭配' });
+            } else {
+                uni.setNavigationBarTitle({ title: '选择搭配' });
+                // #ifdef MP-WEIXIN
+                uni.hideTabBar();
+                // #endif
+            }
+        } else if (mode.value === 'select_for_calendar') {
+            // 日历选择模式
+            targetDate.value = options.date || '';
+            uni.setNavigationBarTitle({ title: '选择穿搭加入日历' });
+        }
     }
 
     loadOutfits();
@@ -192,14 +210,19 @@ onLoad((options: any) => {
     uni.$on('refreshOutfitList', () => {
         loadOutfits();
     });
-    // 监听新建返回
+    // 监听新建/编辑返回，应该重新加载第一页，而不是追加
     uni.$on('refreshOutfits', () => {
-        loadOutfits(true);
+        loadOutfits();
+    });
+    // 监听单品选择变化
+    uni.$on('outfitItemsSelected', (items: any[]) => {
+        // 处理单品选择变化的逻辑
     });
 });
 
 onUnload(() => {
     uni.$off('refreshOutfitList');
+    uni.$off('refreshOutfits');
 });
 
 // --- 方法 ---
@@ -211,6 +234,8 @@ const loadOutfits = async (isLoadMore = false) => {
 	if (!isLoadMore) {
 		page.value = 1;
 		finished.value = false;
+        // 清空列表，避免刷新时闪烁或重复
+        if (page.value === 1) outfitList.value = [];
 	}
 
 	try {
@@ -281,6 +306,7 @@ const loadOutfits = async (isLoadMore = false) => {
 		uni.showToast({ title: '加载失败', icon: 'none' });
 	} finally {
 		loading.value = false;
+        uni.stopPullDownRefresh();
 	}
 };
 
@@ -290,12 +316,11 @@ const handleTabChange = (val: string) => {
 };
 
 const onSearchChange = (e: any) => {
-	keyword.value = e.detail;
-};
-
-const onLoadMore = () => {
-    if (!finished.value) {
-        loadOutfits(true);
+    // 兼容处理不同平台的事件详情
+    keyword.value = e?.detail ?? e ?? '';
+    // 如果关键词为空，自动刷新列表
+    if (!keyword.value) {
+        loadOutfits();
     }
 };
 
@@ -309,7 +334,16 @@ const goToCreate = () => {
 
 // 跳转到详情/编辑页面 (或切换选中状态)
 const goToDetail = (item: OutfitItem) => {
-    if (isSelectMode.value) {
+    if (mode.value === 'select_for_calendar') {
+        handleAddCalendar(item);
+        return;
+    }
+
+    if (isSingleSelect.value) {
+        // 单选模式：选中即返回
+        uni.$emit('outfitSelected', item);
+        uni.navigateBack();
+    } else if (isSelectMode.value) {
         toggleSelect(item.id);
     } else {
         // 修正：点击穿搭卡片进入穿搭编辑页 (create)，而不是日记详情页
@@ -317,6 +351,43 @@ const goToDetail = (item: OutfitItem) => {
             url: `/pages/outfit/create?id=${item.id}`
         });
     }
+};
+
+// 添加到日历逻辑
+const handleAddCalendar = (item: OutfitItem) => {
+    if (!targetDate.value) return;
+    
+    uni.showModal({
+        title: '确认添加',
+        content: `是否将"${item.name}"添加到 ${targetDate.value}？`,
+        success: async (res) => {
+            if (res.confirm) {
+                try {
+                    uni.showLoading({ title: '添加中...' });
+                    const userInfo = uni.getStorageSync('userInfo');
+                    const account = userInfo ? userInfo.account : '';
+                    
+                    const apiRes: any = await addToCalendar({
+                        account,
+                        outfit_id: item.id,
+                        date: targetDate.value
+                    });
+                    
+                    if (apiRes.code === 200) {
+                        uni.showToast({ title: '添加成功' });
+                        setTimeout(() => {
+                            uni.navigateBack();
+                        }, 800);
+                    } else {
+                        uni.showToast({ title: apiRes.msg || '添加失败', icon: 'none' });
+                    }
+                } catch (e) {
+                    uni.hideLoading();
+                    uni.showToast({ title: '网络错误', icon: 'none' });
+                }
+            }
+        }
+    });
 };
 
 // 切换选中
@@ -329,7 +400,7 @@ const toggleSelect = (id: number) => {
     }
 };
 
-// 确认选择
+// 确认选择 (多选模式下使用)
 const confirmSelection = async () => {
     if (selectedIds.value.length === 0) {
         uni.showToast({ title: '请先选择搭配', icon: 'none' });

@@ -14,7 +14,8 @@ router.post('/', async (req, res) => {
         image_url, // 新增：接收合成图 URL
         scene_ids, 
         season_ids, 
-        items 
+        items,
+        source // 新增：接收来源字段
     } = req.body;
 
     if (!account || !items || items.length === 0) {
@@ -33,11 +34,12 @@ router.post('/', async (req, res) => {
         const userId = userRows[0].id;
 
         // 2. 插入穿搭主表
-        // 注意：需要在数据库 outfits 表中添加 temperature 字段
+        // 注意：包含 source 字段，默认为 'USER'
+        const finalSource = source || 'USER';
         const [outfitResult] = await connection.query(`
-            INSERT INTO outfits (user_id, name, bg_color, description, weather, temperature, image_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `, [userId, name, bg_color || '#ffffff', description || '', weather || '', temperature || '', image_url || null]);
+            INSERT INTO outfits (user_id, name, bg_color, description, weather, temperature, image_url, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [userId, name, bg_color || '#ffffff', description || '', weather || '', temperature || '', image_url || null, finalSource]);
         
         const outfitId = outfitResult.insertId;
 
@@ -139,7 +141,8 @@ router.get('/', async (req, res) => {
         const userId = userRows[0].id;
 
         // 构建筛选条件
-        let whereClause = 'WHERE o.user_id = ?';
+        // 核心修改：默认过滤掉 source = 'INSPIRATION' 的穿搭，只显示用户创建的 (USER) 或者旧数据 (NULL)
+        let whereClause = "WHERE o.user_id = ? AND (o.source IS NULL OR o.source != 'INSPIRATION')";
         const params = [userId];
 
         // 关键词搜索
@@ -503,14 +506,35 @@ router.get('/calendar/list', async (req, res) => {
         `;
         
         const [rows] = await db.query(sql, [userId, `${startStr}%`]);
-        
-        // 格式化日期
-        const list = rows.map(row => ({
-            ...row,
-            // calendar_date 已经在 SQL 中格式化
-        }));
 
-        res.json({ code: 200, data: list });
+        // 3. 补充标签信息 (Scene & Season)
+        if (rows.length > 0) {
+            const outfitIds = [...new Set(rows.map(r => r.outfit_id))];
+            
+            const [tags] = await db.query(`
+                SELECT etr.entity_id as outfit_id, t.tag_name, t.tag_type
+                FROM entity_tag_relation etr
+                JOIN tags t ON etr.tag_id = t.tag_id
+                WHERE etr.entity_id IN (?) AND etr.entity_type = 'OUTFIT'
+            `, [outfitIds]);
+
+            rows.forEach(row => {
+                const outfitTags = tags.filter(t => t.outfit_id === row.outfit_id);
+                // 拼接场景标签
+                row.scene = outfitTags
+                    .filter(t => t.tag_type === 'SCENE')
+                    .map(t => t.tag_name)
+                    .join('/'); 
+                
+                // 拼接季节标签
+                row.season = outfitTags
+                    .filter(t => t.tag_type === 'SEASON')
+                    .map(t => t.tag_name)
+                    .join('/');
+            });
+        }
+        
+        res.json({ code: 200, data: rows });
     } catch (err) {
         console.error('获取日历失败:', err);
         res.status(500).json({ code: 500, msg: '服务器错误' });

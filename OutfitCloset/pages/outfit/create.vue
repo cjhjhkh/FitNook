@@ -6,8 +6,17 @@
                 <van-icon name="arrow-left" size="22px" color="#333" />
             </view>
             <text>{{ outfitId ? (isReadOnly ? '搭配详情' : '编辑搭配') : 'DIY搭配' }}</text>
-            <view v-if="outfitId && !isReadOnly" class="delete-outfit-btn" @tap="handleDelete">
-                <van-icon name="delete-o" size="22px" color="#ee0a24" />
+            
+            <view class="header-right" style="display: flex; align-items: center;">
+                <!-- 收藏按钮 -->
+                <view v-if="outfitId" class="favorite-btn" @tap="toggleFavorite" style="padding: 8px;">
+                     <van-icon :name="isFavorite ? 'like' : 'like-o'" size="22px" :color="isFavorite ? '#ee0a24' : '#333'" />
+                </view>
+
+                <!-- 删除按钮 -->
+                <view v-if="outfitId && !isReadOnly" class="delete-outfit-btn" @tap="handleDelete">
+                    <van-icon name="delete-o" size="22px" color="#ee0a24" />
+                </view>
             </view>
         </view>
 
@@ -18,14 +27,18 @@
                     :class="{ active: currentBg === color }" :style="{ background: color }" @tap="currentBg = color">
                 </view>
             </view>
-            <view class="save-btn" @tap="handleSave">保存</view>
+            
+            <view class="right-actions">
+                <view class="action-btn clear-btn" @tap="confirmClear">清空</view>
+                <view class="action-btn save-btn" @tap="handleSave">保存</view>
+            </view>
         </view>
 
         <!-- 离屏 Canvas，用于生成合成图 (移出屏幕外) -->
         <!-- 修复：将 left 改为 0 且 z-index 设为负数，防止因移出屏幕导致 draw 回调不执行 -->
         <canvas canvas-id="snapshotCanvas" id="snapshotCanvas" :style="{
-            width: 375 + 'px',
-            height: 375 + 'px',
+            width: snapshotWidth + 'px',
+            height: snapshotHeight + 'px',
             position: 'fixed',
             left: 0,
             top: 0,
@@ -45,52 +58,63 @@
                     transform: `translate(-50%, -50%) rotate(${item.rotate}deg) scale(${item.scale})`,
                     zIndex: item.zIndex
                 }" @touchstart.stop="onTouchStart(item, $event)" @touchmove.stop="onTouchMove"
-                @touchend.stop="onTouchEnd">
+                @touchend.stop="onTouchEnd" @tap.stop>
                 <image :src="item.image_url" mode="aspectFit" class="item-img"
                     :style="{ transform: item.isFlipped ? 'scaleX(-1)' : 'none' }" />
 
                 <!-- 选中状态下的操作控件 -->
                 <view v-if="activeUuid === item.uuid && !item.locked && !isReadOnly" class="controls">
                     <!-- 删除按钮 (左上角) -->
-                    <view class="ctrl-btn delete-btn" @tap.stop="deleteItem(index)">
-                        <van-icon name="cross" color="#fff" size="12px" />
+                    <!-- 修复：使用 touchend.stop.prevent 确保在移动端能灵敏触发，避免 tap 被拖拽检测打断 -->
+                    <view class="ctrl-btn delete-btn" @touchend.stop.prevent="deleteItem(item)" @touchstart.stop="noop">
+                        <van-icon name="cross" size="14px" color="#fff" style="pointer-events: none;" />
                     </view>
                     <!-- 翻转按钮 (右上角) -->
-                    <view class="ctrl-btn flip-btn" @tap.stop="flipItem(item)">
-                        <van-icon name="exchange" color="#fff" size="12px" />
+                    <view class="ctrl-btn flip-btn" @touchend.stop.prevent="flipItem(item)" @touchstart.stop="noop">
+                        <van-icon name="replay" size="14px" color="#fff" style="pointer-events: none;" />
                     </view>
-                    <!-- 锁定按钮 (左下角) -->
-                    <view class="ctrl-btn lock-btn" @tap.stop="lockItem(item)">
-                        <van-icon name="lock" color="#fff" size="12px" />
+                    <!-- 旋转/缩放手柄 (右下角) -->
+                    <view class="ctrl-btn transform-handle" 
+                        @touchstart.stop="onHandleStart(item, $event)" 
+                        @touchmove.stop="onHandleMove" 
+                        @touchend.stop="onHandleEnd">
+                        <van-icon name="expand-o" size="14px" color="#fff" style="transform: rotate(45deg); pointer-events: none;" />
                     </view>
-                    <!-- 变换手柄 (右下角) -->
-                    <view class="ctrl-btn transform-handle" @touchstart.stop="onHandleStart(item, $event)"
-                        @touchmove.stop="onHandleMove" @touchend.stop="onHandleEnd">
-                        <van-icon name="replay" color="#fff" size="12px" />
+                    <!-- 层级调整按钮 (左下角) -->
+                    <!-- 修改功能为：在最顶层和最底层之间切换 -->
+                    <view class="ctrl-btn layer-btn" @touchend.stop.prevent="toggleLayer(item)" @touchstart.stop="noop">
+                         <van-icon name="exchange" size="14px" color="#fff" style="transform: rotate(90deg); pointer-events: none;" />
+                    </view>
+                    <!-- 锁定按钮 (左侧中间) -->
+                    <view class="ctrl-btn lock-btn" @touchend.stop.prevent="lockItem(item)" @touchstart.stop="noop">
+                         <van-icon name="lock" size="14px" color="#fff" style="pointer-events: none;" />
                     </view>
                 </view>
 
                 <!-- 锁定状态下的提示/解锁按钮 (右上角) -->
                 <view v-if="activeUuid === item.uuid && item.locked && !isReadOnly" class="controls locked-controls">
-                    <view class="ctrl-btn unlock-btn" @tap.stop="unlockItem(item)">
-                        <van-icon name="lock" color="#f44" size="12px" />
+                    <view class="ctrl-btn unlock-btn" @touchend.stop.prevent="unlockItem(item)" @touchstart.stop="noop">
+                        <van-icon name="lock" color="#f44" size="12px" style="pointer-events: none;" />
                     </view>
                 </view>
             </view>
 
             <view v-if="canvasItems.length === 0" class="empty-tip">
-                {{ isReadOnly ? '暂无衣物' : '点击下方衣物添加到画布' }}
+                {{ isReadOnly ? '暂无衣物' : '点击下方选择衣物' }}
             </view>
         </view>
 
         <!-- 底部衣橱面板 -->
-        <view class="bottom-panel" :class="{ expanded: isPanelExpanded }" @tap.stop="expandPanel" v-if="!isReadOnly">
+        <view class="bottom-panel" :class="{ expanded: isPanelExpanded, hidden: isReadOnly }" @tap="onPanelClick">
+            <!-- 拖拽手柄条 -->
+            <view class="panel-handle"></view>
+
             <!-- 分类 Tab -->
             <view class="category-tabs">
                 <scroll-view scroll-x class="tabs-scroll" :show-scrollbar="false">
-                    <view class="tab-item" :class="{ active: currentCatId === 0 }" @tap="switchCategory(0)">全部</view>
+                    <view class="tab-item" :class="{ active: currentCatId === 0 }" @tap.stop="switchCategory(0)">全部</view>
                     <view v-for="cat in categories" :key="cat.id" class="tab-item"
-                        :class="{ active: currentCatId === cat.id }" @tap="switchCategory(cat.id)">
+                        :class="{ active: currentCatId === cat.id }" @tap.stop="switchCategory(cat.id)">
                         {{ cat.name }}
                     </view>
                 </scroll-view>
@@ -100,18 +124,29 @@
             </view>
 
             <!-- 衣物列表 -->
+            <!-- 去掉 @tap.stop，让点击事件冒泡到 bottom-panel，利用 onPanelClick 统一处理面板的展开/收起 -->
             <scroll-view scroll-y class="clothes-scroll" @scrolltolower="loadMoreClothes">
                 <view class="clothes-list">
-                    <view v-for="item in clothesList" :key="item.id" class="clothes-card" @tap="addToCanvas(item)">
+                    <view v-for="item in clothesList" :key="item.id" class="clothes-card" @tap.stop="addToCanvas(item)">
                         <image :src="item.image_url" mode="aspectFill" class="c-img" />
                     </view>
                 </view>
                 <van-empty v-if="clothesList.length === 0 && !listLoading" description="暂无衣物" />
+                <!-- 底部垫高，防止被安全区遮挡 -->
+                <view class="safe-area-spacer"></view>
             </scroll-view>
         </view>
 
+        <!-- 只读模式下的操作栏 (针对灵感/推荐内容) -->
+        <view v-if="isReadOnly" class="readonly-actions safe-area-bottom">
+            <button class="action-btn primary-btn" @tap="applyInspiration">
+                <van-icon name="magic-wand" style="margin-right: 4px;" />
+                一键试穿
+            </button>
+        </view>
+
         <!-- 保存弹窗 -->
-        <van-popup :show="showSavePopup" round position="bottom" @close="cancelSave" z-index="1000">
+        <van-popup :show="showSavePopup" round position="bottom" @close="cancelSave" z-index="20000">
             <view class="save-popup">
                 <view class="popup-title">保存搭配</view>
                 <van-field :value="form.name" label="名称" placeholder="请输入搭配名称" @change="form.name = $event.detail" />
@@ -172,7 +207,7 @@
 
         <!-- 筛选弹窗 -->
         <van-popup :show="showFilterPopup" position="right" custom-style="width: 80%; height: 100%;"
-            @close="showFilterPopup = false">
+            @close="showFilterPopup = false" z-index="20001">
             <view class="filter-container">
                 <view class="filter-title">筛选衣物</view>
 
@@ -221,20 +256,26 @@
             </view>
         </van-popup>
 
-        <!-- 底部添加按钮 -->
-        <image class="add-btn" :class="{ 'btn-collapsed': !isPanelExpanded }" src="/static/icon/add.png"
-            @tap="showClothingSelect" v-if="!isReadOnly" />
-
     </view>
 
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, getCurrentInstance } from 'vue';
+import { ref, onMounted, getCurrentInstance, onUnmounted } from 'vue';
 // @ts-ignore
 import { onLoad, onReady } from '@dcloudio/uni-app';
 import { getCategories, getScenes, getScenes as getTags, getSeasons, getClothesList, addTag } from '@/api/clothes';
 import { createOutfit, getOutfitDetail, updateOutfit, deleteOutfit, addToCalendar, uploadSnapshot } from '@/api/outfit';
+import { checkFavorite, addFavorite, removeFavorite } from '@/api/favorites';
+
+// --- 工具函数 ---
+const generateUUID = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+};
 
 // --- 类型定义 ---
 interface CanvasItem {
@@ -259,12 +300,60 @@ interface CanvasItem {
 const bgColors = ['#ffffff', '#f7f8fa', '#fff0f5', '#f0f8ff', '#f5f5dc', '#e6e6fa'];
 const currentBg = ref(bgColors[1]);
 
+// 获取当前组件实例，供后续异步操作使用
+const instance = getCurrentInstance();
+
+// 空函数，用于拦截 touchstart 冒泡
+const noop = () => {};
+
+const goBack = () => {
+    uni.navigateBack();
+};
+
+const handleDelete = () => {
+    uni.showModal({
+        title: '提示',
+        content: '确定要删除这个搭配吗？',
+        success: async (res) => {
+            if (res.confirm && outfitId.value) {
+                try {
+                    await deleteOutfit(outfitId.value);
+                    uni.showToast({ title: '删除成功', icon: 'success' });
+                     uni.$emit('refreshOutfitList');
+                    setTimeout(() => {
+                        uni.navigateBack();
+                    }, 1500);
+                } catch (e) {
+                    uni.showToast({ title: '删除失败', icon: 'none' });
+                }
+            }
+        }
+    });
+};
+
+// 拖拽相关状态
+let isDragging = false;
+let isTransforming = false;
+let currentItem: CanvasItem | null = null;
+let startX = 0;
+let startY = 0;
+let initialItemX = 0;
+let initialItemY = 0;
+let initialRotate = 0;
+let initialScale = 1;
+
 const canvasItems = ref<CanvasItem[]>([]);
 const activeUuid = ref<string>('');
 const outfitId = ref<string | number>(''); // 当前编辑的搭配ID
 const isReadOnly = ref(false); // 是否只读模式
+const isFavorite = ref(false); // 是否已收藏
+const outfitSource = ref(''); // 搭配来源
 const targetDate = ref(''); // 来源日期（如果有）
-const canvasRect = ref({ width: 0, height: 0 }); // 画布尺寸
+const canvasRect = ref({ width: 0, height: 0, left: 0, top: 0 }); // 画布尺寸
+// 响应式快照画布尺寸，初始化为屏幕宽度或默认值
+const snapshotWidth = ref(375);
+const snapshotHeight = ref(375);
+
 // 画布相对于屏幕的位置，用于计算旋转中心
 const canvasOffset = ref({ left: 0, top: 0 });
 const isCanvasReady = ref(false); // 画布是否已就绪
@@ -291,7 +380,7 @@ const filterForm = ref({
 const colorOptions = [
     { name: '黑', value: '黑', hex: '#000000' },
     { name: '白', value: '白', hex: '#FFFFFF' },
-    { name: '灰', value: '灰', hex: '#808080' },
+    { name: '灰', value: '#808080' },
     { name: '红', value: '红', hex: '#FF0000' },
     { name: '橙', value: '橙', hex: '#FFA500' },
     { name: '黄', value: '黄', hex: '#FFFF00' },
@@ -329,265 +418,190 @@ const onTemperatureChange = (e: any) => {
     form.value.temperature = temperatureOptions[e.detail.value];
 };
 
-// 手势相关临时变量
-let startX = 0;
-let startY = 0;
-let initialItemX = 0;
-let initialItemY = 0;
-let initialRotate = 0;
-let initialScale = 1;
-let centerX = 0;
-let centerY = 0;
-let isDragging = false;
-let isTransforming = false;
-let currentItem: CanvasItem | null = null;
-const instance = getCurrentInstance();
+// --- 自动布局函数 ---
+const autoLayoutItems = (items: any[]) => {
+    if (!items || items.length === 0) return;
 
-// --- 导航 ---
-const goBack = () => {
-    uni.navigateBack();
-};
+    // 清空当前画布
+    canvasItems.value = [];
 
-// 删除搭配
-const handleDelete = () => {
-    uni.showModal({
-        title: '提示',
-        content: '确定要删除该搭配吗？',
-        success: async (res) => {
-            if (res.confirm) {
-                try {
-                    const result = await deleteOutfit(outfitId.value) as any;
-                    if (result.code === 200) {
-                        // 通知列表页刷新
-                        uni.$emit('refreshOutfitList');
+    // 画布尺寸
+    const cw = canvasRect.value.width || snapshotWidth.value;
+    const ch = canvasRect.value.height || snapshotHeight.value;
+    const centerX = cw / 2;
+    const centerY = ch / 2;
 
-                        uni.showToast({ title: '删除成功', icon: 'success' });
-                        setTimeout(() => {
-                            uni.navigateBack();
-                        }, 1500);
-                    } else {
-                        uni.showToast({ title: result.msg || '删除失败', icon: 'none' });
-                    }
-                } catch (error) {
-                    console.error(error);
-                    uni.showToast({ title: '删除失败', icon: 'none' });
-                }
-            }
+    // 将传入的items转换为canvasItems
+    items.forEach((clothesItem, index) => {
+        // 默认居中
+        let x = centerX;
+        let y = centerY;
+        let zIndex = 1; // 声明 zIndex
+        let scale = 0.5; // 声明 scale
+        const catName = clothesItem.category || '';
+        
+        // 既然是自动布局，稍微错开一点，或者根据部位摆放
+        if (catName.includes('上衣') || catName.includes('外套')) {
+            y = centerY - 80;
+            zIndex = 2;
+            scale = 0.6;
+        } else if (catName.includes('裤') || catName.includes('裙') || catName.includes('下装')) {
+            y = centerY + 80;
+            zIndex = 1;
+            scale = 0.6;
+        } else if (catName.includes('鞋')) {
+            y = centerY + 160;
+            x = centerX; // 鞋子通常放底部
+            zIndex = 3;
+            scale = 0.5;
+        } else if (catName.includes('帽') || catName.includes('头')) {
+             y = centerY - 150;
+             zIndex = 4;
+             scale = 0.4;
+        } else if (catName.includes('包')) {
+             x = centerX + 100;
+             y = centerY;
+             zIndex = 4;
+             scale = 0.5;
         }
+
+        const newItem: CanvasItem = {
+            uuid: generateUUID(),
+            id: clothesItem.id,
+            image_url: clothesItem.image_url, // 确保有图片链接
+            x: x,
+            y: y,
+            width: 200, // 默认宽度，实际渲染时image mode会处理
+            height: 200,
+            scale: scale,
+            rotate: 0,
+            zIndex: zIndex,
+            isFlipped: false,
+            locked: false
+        };
+        canvasItems.value.push(newItem);
     });
+    
+    activeUuid.value = ''; // 不选中任何衣物
 };
-
-// --- 生命周期 ---
-onLoad((options: any) => {
-    if (options.mode === 'view' || options.readonly === 'true') {
-        isReadOnly.value = true;
-    }
-
-    if (options.id) {
-        outfitId.value = options.id;
-        loadOutfitDetail(options.id);
-    }
-    if (options.date) {
-        targetDate.value = options.date;
-    }
-
-    loadCategories();
-    loadScenes();
-    loadSeasons();
-    loadClothes(true);
-});
-
-// 获取画布位置信息
-onReady(() => {
-    const query = uni.createSelectorQuery().in(instance);
-
-    // 使用简单的轮询确保获取到准确的宽高
-    let retryCount = 0;
-    const initCanvasRect = () => {
-        query.select('.canvas-container').boundingClientRect((data: any) => {
-            if (data && data.width > 0 && data.height > 0) {
-                console.log('Canvas Ready:', data.width, data.height);
-                canvasOffset.value = {
-                    left: data.left || 0,
-                    top: data.top || 0
-                };
-                canvasRect.value = {
-                    width: data.width || 0,
-                    height: data.height || 0
-                };
-                isCanvasReady.value = true;
-                // 画布准备好了，尝试渲染等待中的数据
-                renderPendingItems();
-            } else {
-                if (retryCount < 10) {
-                    retryCount++;
-                    setTimeout(initCanvasRect, 200);
-                } else {
-                    // 降级：如果实在取不到，使用屏幕宽度兜底，防止无法编辑
-                    console.warn('Canvas rect fallback');
-                    const sysInfo = uni.getSystemInfoSync();
-                    canvasRect.value = { width: sysInfo.windowWidth, height: sysInfo.windowWidth };
-                    isCanvasReady.value = true;
-                    renderPendingItems();
-                }
-            }
-        }).exec();
-    };
-
-    // 稍微延时一点开始获取，确保布局稳定
-    setTimeout(initCanvasRect, 100);
-});
 
 // --- 数据保存 ---
 // 生成快照并上传
-const generateSnapshot = (): Promise<string> => {
-    return new Promise(async (resolve, reject) => {
-        // 如果没有衣物，直接返回空字符串
-        if (canvasItems.value.length === 0) {
-            resolve('');
-            return;
-        }
+const generateSnapshot = async (): Promise<string> => {
+    uni.showLoading({ title: '生成预览中...' });
+    try {
+        // 使用预先捕获的 instance，而不是在异步函数中重新获取
+        // @ts-ignore
+        const ctx = uni.createCanvasContext('snapshotCanvas', instance);
+        // 使用实际画布尺寸，确保所见即所得
+        const cW = snapshotWidth.value;
+        const cH = snapshotHeight.value;
 
-        uni.showLoading({ title: '封面生成中' });
+        // 1. 填充背景
+        // 兼容处理：legacy canvas API 使用 setFillStyle
+        ctx.setFillStyle(currentBg.value || '#ffffff');
+        ctx.fillRect(0, 0, cW, cH);
 
-        // 1. 设置超时竞态 (3.5秒超时) —— 防止永久卡死
-        let isTimedOut = false;
-        const timeoutId = setTimeout(() => {
-            isTimedOut = true;
-            console.warn('生成封面超时，跳过');
-            uni.hideLoading();
-            resolve(''); // 超时则视为成功（无图），保证流程不中断
-        }, 3500);
+        // 2. 准备图片 (canvas drawImage 需要本地路径，且需按z-index排序绘制)
+        const sortedItems = [...canvasItems.value].sort((a, b) => a.zIndex - b.zIndex);
 
-        try {
-            // 修复：必须使用 instance.proxy 确保上下文绑定正确
-            const contextThis = instance?.proxy || instance;
-            const ctx = uni.createCanvasContext('snapshotCanvas', contextThis);
-
-            if (!ctx) {
-                console.error('Canvas context missing');
-                throw new Error('Canvas context missing');
-            }
-
-            // 白色背景
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, 375, 375);
-
-            // 按 zIndex 排序
-            const sortedItems = [...canvasItems.value].sort((a, b) => a.zIndex - b.zIndex);
-            
-            // 计算缩放比例 (适配不同屏幕尺寸到 375x375 的快照)
-            const currentW = canvasRect.value.width || 375;
-            // 假设画布大致是正方形或以宽度为基准
-            const ratio = 375 / currentW;
-
-            // 2. 并发下载图片
-            const imageTasks = sortedItems.map(item => {
-                return new Promise<{ path: string, item: CanvasItem } | null>((res) => {
-                    // 优化：本地路径直接使用
-                    if (item.image_url && !item.image_url.startsWith('http') && !item.image_url.startsWith('//')) {
-                        res({ path: item.image_url, item });
-                        return;
-                    }
-
-                    // 网络图片下载
-                    uni.downloadFile({
-                        url: item.image_url,
-                        success: (dRes) => {
-                            if (dRes.statusCode === 200) {
-                                res({ path: dRes.tempFilePath, item });
-                            } else {
-                                console.warn('下载失败:', item.image_url);
-                                res(null);
-                            }
-                        },
-                        fail: () => res(null)
+        const promiseList = sortedItems.map(item => {
+            return new Promise<any>((resolve) => {
+                // 如果是网络图片需要下载获取本地临时路径
+                if (item.image_url && (item.image_url.startsWith('http') || item.image_url.startsWith('//'))) {
+                    // 处理协议无关URL
+                    const url = item.image_url.startsWith('//') ? 'https:' + item.image_url : item.image_url;
+                    uni.getImageInfo({
+                        src: url,
+                        success: (res) => resolve({ ...item, path: res.path }),
+                        fail: (err) => {
+                            console.error('Image load failed:', url, err);
+                            resolve(null);
+                        }
                     });
-                });
+                } else {
+                    // 本地路径或base64直接使用
+                    resolve({ ...item, path: item.image_url });
+                }
             });
+        });
 
-            const loadedImages = await Promise.all(imageTasks);
+        const itemsToDraw = await Promise.all(promiseList);
 
-            if (isTimedOut) return;
+        // 3. 绘制元素
+        itemsToDraw.forEach(item => {
+            if (!item || !item.path) return;
+            
+            ctx.save();
+            // 移动坐标原点到图片中心 (item.x, item.y 是中心点坐标)
+            ctx.translate(item.x, item.y);
+            // 旋转
+            ctx.rotate((item.rotate * Math.PI) / 180);
+            // 缩放
+            ctx.scale(item.scale, item.scale);
+            // 翻转
+            if (item.isFlipped) {
+                ctx.scale(-1, 1);
+            }
+            
+            // 绘制图片 (偏移宽高的一半，使图片中心对齐原点)
+            // item.width/height 是基准宽高
+            ctx.drawImage(item.path, -item.width / 2, -item.height / 2, item.width, item.height);
+            
+            ctx.restore();
+        });
 
-            // 3. 同步绘制
-            loadedImages.forEach(imgData => {
-                if (!imgData) return;
-                const { path, item } = imgData;
-
-                ctx.save();
-                // 使用比例转换坐标
-                ctx.translate(item.x * ratio, item.y * ratio);
-                ctx.rotate(item.rotate * Math.PI / 180);
-                // 确保宽高与缩放逻辑正确，叠加全局缩放比例
-                const finalScale = item.scale * ratio;
-                ctx.scale(finalScale, finalScale);
-                
-                if (item.isFlipped) ctx.scale(-1, 1);
-                ctx.drawImage(path, -item.width / 2, -item.height / 2, item.width, item.height);
-                ctx.restore();
-            });
-
-            // 4. 导出图片
+        // 4. 生成并上传
+        return new Promise((resolve) => {
             ctx.draw(false, () => {
-                if (isTimedOut) return;
-
+                // 延时一小会儿确保绘制完成
                 setTimeout(() => {
                     uni.canvasToTempFilePath({
-                        canvasId: 'snapshotCanvas', // 必须与模板一致
-                        width: 375,
-                        height: 375,
-                        destWidth: 375,
-                        destHeight: 375,
+                        canvasId: 'snapshotCanvas',
+                        width: cW,
+                        height: cH,
+                        destWidth: cW * 2, // 2x 输出更清晰
+                        destHeight: cH * 2,
                         fileType: 'jpg',
-                        quality: 0.7,
-                        success: (res) => {
-                            if (isTimedOut) return;
-
-                            // 5. 上传
-                            uploadSnapshot(res.tempFilePath)
-                                .then((uploadRes: any) => {
-                                    clearTimeout(timeoutId);
-                                    uni.hideLoading();
-                                    const finalUrl = (uploadRes.code === 200 && uploadRes.data && uploadRes.data.url)
-                                        ? uploadRes.data.url
-                                        : (uploadRes.url || uploadRes.data || '');
-                                    resolve(finalUrl);
-                                })
-                                .catch(() => {
-                                    clearTimeout(timeoutId);
-                                    uni.hideLoading();
+                        quality: 0.8,
+                        success: async (res) => {
+                            try {
+                                const uploadRes: any = await uploadSnapshot(res.tempFilePath);
+                                if (uploadRes && (uploadRes.code === 200 || uploadRes.url)) {
+                                     resolve(uploadRes.url || uploadRes.data?.url);
+                                } else {
+                                    console.error('Upload failed result:', uploadRes);
                                     resolve('');
-                                });
-                        },
-                        fail: (err) => {
-                            console.error('导出失败', err);
-                            if (!isTimedOut) {
-                                clearTimeout(timeoutId);
-                                uni.hideLoading();
+                                }
+                            } catch (e) {
+                                console.error('Upload error:', e);
                                 resolve('');
                             }
+                        },
+                        fail: (err) => {
+                            console.error('Canvas export failed:', err);
+                            resolve('');
                         }
-                    }, contextThis); // 传入组件实例
-                }, 100);
+                    }, instance);
+                }, 200);
             });
+        });
 
-        } catch (e) {
-            console.error('快照异常', e);
-            if (!isTimedOut) {
-                clearTimeout(timeoutId);
-                uni.hideLoading();
-                resolve('');
-            }
-        }
-    });
+    } catch (e) {
+        console.error('Snapshot generation error:', e);
+        return '';
+    } finally {
+        uni.hideLoading();
+    }
 };
 
 const handleSave = () => {
     if (canvasItems.value.length === 0) {
-        uni.showToast({ title: '请至少添加一件衣物', icon: 'none' });
+        uni.showToast({ title: '请先添加衣物', icon: 'none' });
         return;
     }
+    // 【修复】点击保存时取消选中状态，防止编辑框(虚线和按钮)浮在弹窗之上，同时解决层级穿透造成的视觉干扰
+    activeUuid.value = '';
     showSavePopup.value = true;
 };
 
@@ -596,130 +610,107 @@ const cancelSave = () => {
 };
 
 const confirmSave = async () => {
-    if (!form.value.name) {
+    if (!form.value.name || !form.value.name.trim()) {
         uni.showToast({ title: '请输入搭配名称', icon: 'none' });
         return;
     }
 
-    // 1. 生成封面图
-    // 如果生成失败返回空字符串，后端会自动使用第一件单品的图作为封面
-    let snapshotTempPath = await generateSnapshot();
-    let finalSnapshotUrl = '';
+    // 获取当前用户信息，确保 account 存在
+    const currentUser = uni.getStorageSync('userInfo') || {};
+    if (!currentUser.account) {
+        uni.showToast({ title: '用户信息失效，请重新登录', icon: 'none' });
+        return;
+    }
 
-    // 如果生成了临时路径，必须先上传换取网络地址
-    if (snapshotTempPath) {
-         try {
-             // 提示用户正在上传
-             uni.showLoading({ title: '封面上传中...' });
-             const uploadRes: any = await uploadSnapshot(snapshotTempPath);
-             
-             // 兼容不同的后端返回格式 (可能是直接返回 URL 字符串，或者对象 { url: '...' })
-             if (typeof uploadRes === 'string') {
-                 finalSnapshotUrl = uploadRes;
-             } else if (uploadRes && uploadRes.url) {
-                 finalSnapshotUrl = uploadRes.url;
-             } else if (uploadRes && uploadRes.data && uploadRes.data.url) {
-                 finalSnapshotUrl = uploadRes.data.url;
-             }
-         } catch (err) {
-             console.error('封面上传失败，将使用默认封面', err);
-             // 上传失败不阻断保存，只是没有封面图
-         } finally {
-             uni.hideLoading();
-         }
+    // 1. 生成封面图
+    let finalSnapshotUrl = '';
+    
+    // 如果已有 items，尝试生成快照
+    if (canvasItems.value.length > 0) {
+        try {
+            finalSnapshotUrl = await generateSnapshot();
+        } catch (e) {
+            console.error('Snapshot generation failed', e);
+        }
+        
+        // 兜底策略：如果生成失败，使用第一件衣物的图片作为封面
+        if (!finalSnapshotUrl && canvasItems.value.length > 0) {
+            finalSnapshotUrl = canvasItems.value[0].image_url;
+        }
     }
 
     // 2. 准备数据
+    // 收集所有衣物的ID
     const { width: cW, height: cH } = canvasRect.value;
     const safeW = cW || 375;
     const safeH = cH || 375;
 
-    // 收集所有衣物的ID
-    const items = canvasItems.value.map(item => ({
-        // 【关键修复】字段名必须为 cloth_id，与后端 routes/outfit.js 接收的字段一致！
-        // 统一使用 item.id，因为它在 addToCanvas 和 renderPendingItems 中都被赋值为单品ID
-        cloth_id: item.id,
-
-        image_url: item.image_url,
-        // 转为相对坐标 (0-1)，适配多端屏幕
-        position_x: Number((item.x / safeW).toFixed(4)),
-        position_y: Number((item.y / safeH).toFixed(4)),
-        
+    const items = canvasItems.value.map((item: CanvasItem) => ({
+        cloth_id: item.id, // 修复：改为 cloth_id 以匹配后端接口
+        // 保存相对坐标 (0-1)，确保不同设备回显一致
+        position_x: item.x / safeW,
+        position_y: item.y / safeH,
         scale: item.scale,
-        rotation: item.rotate,
+        // 后端通常存 rotation
+        rotation: item.rotate, 
         z_index: item.zIndex,
         is_flipped: item.isFlipped ? 1 : 0,
         is_locked: item.locked ? 1 : 0
     }));
 
     if (items.length === 0) {
-        uni.showToast({ title: '画布不能为空', icon: 'none' });
-        return;
+         uni.showToast({ title: '请至少添加一件衣物', icon: 'none' });
+         return;
     }
 
-    const currentUser = uni.getStorageSync('userInfo') || {};
-
-    const data = {
+    const data: any = {
         account: currentUser.account,
         name: form.value.name,
+        // items 需要序列化传递给后端 -> 改为直接传对象，uni.request 会处理
+        items: items,
         description: form.value.remarks,
-        scene_ids: form.value.scene_ids,
-        season_ids: form.value.season_ids,
         weather: form.value.weather,
         temperature: form.value.temperature,
-        bg_color: currentBg.value,
-        items: items,
-        image_url: finalSnapshotUrl // 使用上传后的 URL
+        season_ids: form.value.season_ids,
+        scene_ids: form.value.scene_ids,
+        bg_color: currentBg.value
     };
 
+    // 只有当生成了新图时才更新 image_url
+    if (finalSnapshotUrl) {
+        data.image_url = finalSnapshotUrl;
+    }
+
+    uni.showLoading({ title: '保存中...' });
+
     try {
-        let res;
-        let savedOutfitId = outfitId.value; // 用于后续关联日历
-
         if (outfitId.value) {
-            res = await updateOutfit(outfitId.value, data);
+            await updateOutfit(outfitId.value, data);
+            uni.showToast({ title: '更新成功', icon: 'success' });
         } else {
-            res = await createOutfit(data);
-            // 获取新创建的搭配ID
-            if ((res as any).code === 200 && (res as any).data) {
-                // 兼容后端返回格式，可能是 data.id 或直接在 data 里
-                savedOutfitId = (res as any).data.id || (res as any).data;
+            // 新建时，如果没有图，可能用默认图或者必须有图
+            if (!data.image_url) {
+                // 如果生成失败，为了演示可以使用 placeholder 或者阻止
+                // data.image_url = '...default...';
             }
+            await createOutfit(data);
+            uni.showToast({ title: '创建成功', icon: 'success' });
         }
-
-        if ((res as any).code === 200 || (res as any).success) {
-            
-            // 如果有来源日期，且保存成功，且有搭配ID，则关联到日历
-            if (targetDate.value && savedOutfitId) {
-                try {
-                    await addToCalendar({
-                        account: currentUser.account,
-                        outfit_id: savedOutfitId,
-                        date: targetDate.value
-                    });
-                } catch (calError) {
-                    console.error('自动添加到日历失败', calError);
-                    // 不阻断主流程，仅控制台记录
-                }
-            }
-
-            uni.showToast({ title: '保存成功', icon: 'success' });
-            showSavePopup.value = false;
-            
-            // 发送刷新事件，确保由于页面缓存导致的列表不更新问题得到解决
-            uni.$emit('refreshOutfitList'); 
-            uni.$emit('refreshDiaryList');
-
-            // 延迟跳转，以便用户看到成功提示
-            setTimeout(() => {
-                uni.navigateBack();
-            }, 1000);
-        } else {
-            uni.showToast({ title: (res as any).msg || '保存失败', icon: 'none' });
-        }
-    } catch (e) {
-        uni.showToast({ title: '保存出错', icon: 'none' });
-        console.error(e);
+        
+        // 通知列表页刷新
+        uni.$emit('refreshOutfitList');
+        
+        showSavePopup.value = false;
+        
+        // 延迟返回，让用户看到成功提示
+        setTimeout(() => {
+            uni.navigateBack();
+        }, 1500);
+        
+    } catch (e: any) {
+        uni.showToast({ title: e.msg || '保存失败', icon: 'none' });
+    } finally {
+        uni.hideLoading();
     }
 };
 
@@ -730,37 +721,32 @@ const loadOutfitDetail = async (id: string | number) => {
     try {
         const res = await getOutfitDetail(id) as any;
         if (res.code === 200) {
-            const detail = res.data;
-            form.value.name = detail.name;
+            const data = res.data;
+            // 填充表单
+            form.value.name = data.name;
+            form.value.remarks = data.description;
+            form.value.weather = data.weather;
+            form.value.temperature = data.temperature;
+            outfitSource.value = data.source || ''; // 记录来源
+            currentBg.value = data.bg_color || '#f7f8fa';
+            
+            // 解析 ID 列表 (假设后端返回的是对象数组或逗号分隔字符串)
+            // 这里假设后端返回标准的关联数组
+             if (data.scenes) form.value.scene_ids = data.scenes.map((s:any) => s.id);
+             if (data.seasons) form.value.season_ids = data.seasons.map((s:any) => s.id);
 
-            // 解析标签数据
-            const newSceneIds: number[] = [];
-            const newSeasonIds: number[] = [];
-            if (detail.tags && detail.tags.length > 0) {
-                detail.tags.forEach((t: any) => {
-                    // 兼容后端可能返回的标签格式差异
-                    const tagId = t.tag_id || t.id;
-                    const type = t.tag_type || t.type;
-                    if (type === 'SCENE') newSceneIds.push(tagId);
-                    if (type === 'SEASON') newSeasonIds.push(tagId);
-                });
+            // 准备画布数据
+            // 注意：这里先把数据存起来，等画布 ready 后再渲染，或者直接计算
+            if (data.items && data.items.length > 0) {
+                 pendingDetailItems.value = data.items;
+                 renderPendingItems();
             }
-            form.value.scene_ids = newSceneIds;
-            form.value.season_ids = newSeasonIds;
-
-            form.value.weather = detail.weather;
-            form.value.temperature = detail.temperature;
-            form.value.remarks = detail.description || '';
-            currentBg.value = detail.bg_color || bgColors[0];
-
-            // 将数据放入缓冲区，等待 Canvas Ready
-            pendingDetailItems.value = detail.items || [];
-
-            // 尝试渲染（如果 Canvas 已经 Ready，这里会直接执行；否则等待 onReady 触发）
-            renderPendingItems();
+            
+            // 检查收藏状态
+            checkFavStatus();
 
         } else {
-            uni.showToast({ title: res.msg || '获取详情失败', icon: 'none' });
+             uni.showToast({ title: '数据异常', icon: 'none' });
         }
     } catch (error) {
         console.error(error);
@@ -770,16 +756,78 @@ const loadOutfitDetail = async (id: string | number) => {
     }
 };
 
+// --- 收藏逻辑 ---
+const checkFavStatus = async () => {
+    // 确保有 ID 且有用户信息
+    const uid = userInfo.id || (uni.getStorageSync('userInfo') || {}).id;
+    if (!outfitId.value || !uid) return;
+    
+    try {
+        const res: any = await checkFavorite(uid, 'outfit', Number(outfitId.value));
+        if (res.code === 200) {
+            isFavorite.value = res.data.is_favorite;
+        }
+    } catch (e) {
+        console.error('Check favorite failed:', e);
+    }
+};
+
+const toggleFavorite = async () => {
+    const uid = userInfo.id || (uni.getStorageSync('userInfo') || {}).id;
+    if (!uid) {
+        uni.showToast({ title: '请先登录', icon: 'none' });
+        return;
+    }
+    
+    uni.showLoading({ mask: true });
+    try {
+        if (isFavorite.value) {
+            await removeFavorite({
+                userId: uid,
+                itemType: 'outfit',
+                itemId: Number(outfitId.value)
+            });
+            isFavorite.value = false;
+            uni.showToast({ title: '已取消收藏', icon: 'none' });
+        } else {
+            await addFavorite({
+                userId: uid,
+                itemType: 'outfit',
+                itemId: Number(outfitId.value)
+            });
+            isFavorite.value = true;
+            uni.showToast({ title: '收藏成功' });
+        }
+    } catch (e) {
+        uni.showToast({ title: '操作失败', icon: 'none' });
+    } finally {
+        uni.hideLoading();
+    }
+};
+
 // 专门负责将后端数据渲染到画布
 const renderPendingItems = () => {
-    if (!isCanvasReady.value || pendingDetailItems.value.length === 0) return;
+    // 获取当前画布尺寸，如果未就绪则使用屏幕宽度兜底
+    let cW = canvasRect.value.width;
+    let cH = canvasRect.value.height;
 
-    const { width: cW, height: cH } = canvasRect.value;
-    console.log('Start rendering items with canvas size:', cW, cH);
+    // 如果画布尺寸未获取到（比如刚进入页面），尝试用屏幕宽度兜底
+    if (!cW || cW === 0) {
+        const sys = uni.getSystemInfoSync();
+        cW = sys.windowWidth;
+        // 假设画布是正方形
+        cH = cW; 
+        
+        // 更新全局状态，确保保存时也用这个基准
+        canvasRect.value.width = cW;
+        canvasRect.value.height = cH;
+        snapshotWidth.value = cW;
+        snapshotHeight.value = cH;
+    }
 
     // 默认比例
-    const safeW = cW || 375;
-    const safeH = cH || 375;
+    const safeW = cW;
+    const safeH = cH;
 
     // 1. 防御性排序：确保按 zIndex 从小到大渲染 (虽然后端排了序，前端再保底一次)
     const sortedItems = [...pendingDetailItems.value].sort((a, b) => {
@@ -787,31 +835,30 @@ const renderPendingItems = () => {
     });
 
     canvasItems.value = sortedItems.map((item: any) => {
-        // 判断 position_x 是否是百分比 (小于等于1的当作百分比，大于1的当作旧数据的像素值)
-        let finalX = Number(item.position_x);
-        let finalY = Number(item.position_y);
-
-        // 防御性处理：如果坐标无效，放到画布中心
-        if (isNaN(finalX)) finalX = 0.5;
-        if (isNaN(finalY)) finalY = 0.5;
-
-        // 只有当坐标是相对值(<=1)时才需要转换
-        if (finalX <= 1) finalX = finalX * safeW;
-        if (finalY <= 1) finalY = finalY * safeH;
+        // 判断是否需要坐标转换：如果 position_x > 2，说明是旧的历史数据（绝对坐标），否则是相对坐标
+        let x = Number(item.position_x) || 0.5;
+        let y = Number(item.position_y) || 0.5;
+        
+        // 相对坐标转绝对坐标
+        if (x <= 1.5) { x = x * safeW; }
+        if (y <= 1.5) { y = y * safeH; }
 
         return {
-            uuid: item.uuid || Date.now().toString() + Math.random(),
-            id: item.cloth_id,
+            uuid: generateUUID(),
+            id: item.cloth_id || item.id, // 核心修复：后端返回 cloth_id，前端模型用 id
             image_url: item.image_url,
-            x: finalX,
-            y: finalY,
-            width: Number(item.width) || 150,
-            height: Number(item.height) || 150,
-            scale: Number(item.scale) || 1,
+            // 恢复绝对坐标
+            x: x,
+            y: y,
+            
+            width: 200, // 统一默认大小，通过 scale 控制 visuals
+            height: 200,
+            
+            scale: Number(item.scale) || 0.5,
             rotate: Number(item.rotation) || 0,
-            zIndex: Number(item.z_index) || 0,
-            isFlipped: !!item.is_flipped, // 数据库存的是 0/1，转 boolean
-            locked: !!item.is_locked
+            zIndex: Number(item.z_index) || 1,
+            isFlipped: Number(item.is_flipped) === 1, // 修复：后端可能存的是 0/1
+            locked: Number(item.is_locked) === 1
         };
     });
 
@@ -859,6 +906,26 @@ const loadSeasons = async () => {
         console.error(error);
         uni.showToast({ title: '获取季节失败', icon: 'none' });
     }
+};
+
+// 应用灵感/一键试穿
+const applyInspiration = () => {
+    uni.showModal({
+        title: '试穿灵感',
+        content: '将基于此灵感创建新的搭配，您可以自由调整。',
+        success: (res) => {
+            if (res.confirm) {
+                // 1. 解除只读
+                isReadOnly.value = false;
+                // 2. 清空ID，视为新建
+                outfitId.value = '';
+                // 3. 重置标题
+                uni.setNavigationBarTitle({ title: 'DIY搭配' });
+                // 4. 提示
+                uni.showToast({ title: '已应用，请开始创作', icon: 'none' });
+            }
+        }
+    });
 };
 
 // --- 列表加载与筛选 ---
@@ -957,35 +1024,142 @@ const resetFilter = () => {
     loadClothes(true);
 };
 
-// --- 画布操作 ---
+// 添加到画布
 const addToCanvas = (item: any) => {
-    // 默认放到中心
     const { width: cW, height: cH } = canvasRect.value;
-    const centerX = cW ? cW / 2 : 180;
-    const centerY = cH ? cH / 2 : 200;
+    const centerX = (cW || 375) / 2;
+    // 修改：位置靠近画布顶部 (约 1/4 处)
+    const topY = (cH || 375) * 0.25; 
 
-    const newItem: CanvasItem = {
-        uuid: Date.now().toString(),
-        id: item.id,
-        image_url: item.image_url,
-        x: centerX,
-        y: centerY,
-        width: 150,
-        height: 150,
-        scale: 1,
-        rotate: 0,
-        zIndex: canvasItems.value.length + 1
-    };
-    canvasItems.value.push(newItem);
-    activeUuid.value = newItem.uuid;
+    const imageUrl = item.image_url || item.image;
+
+    // 获取图片信息以计算比例
+    uni.getImageInfo({
+        src: imageUrl,
+        success: (imageRes) => {
+            const ratio = imageRes.width / imageRes.height;
+            // 设定基准宽度为 150px (比200小一点，避免太大)
+            const baseWidth = 150;
+            const itemWidth = baseWidth;
+            const itemHeight = baseWidth / ratio;
+
+            const newItem: CanvasItem = {
+                uuid: generateUUID(),
+                id: item.id,
+                image_url: imageUrl,
+                x: centerX + (Math.random() * 40 - 20),
+                // 使用 topY
+                y: topY + (Math.random() * 40 - 20),
+                width: itemWidth,
+                height: itemHeight,
+                scale: 0.5, // 初始缩放
+                rotate: 0,
+                zIndex: canvasItems.value.length + 1,
+                isFlipped: false,
+                locked: false
+            };
+            
+            canvasItems.value.push(newItem);
+            activeUuid.value = newItem.uuid;
+            updateZIndex(newItem);
+            uni.showToast({ title: '已添加', icon: 'none' });
+        },
+        fail: () => {
+            // 获取失败兜底
+            const newItem: CanvasItem = {
+                uuid: generateUUID(),
+                id: item.id,
+                image_url: imageUrl,
+                x: centerX,
+                // 使用 topY
+                y: topY,
+                width: 200,
+                height: 200,
+                scale: 0.5,
+                rotate: 0,
+                zIndex: canvasItems.value.length + 1,
+                isFlipped: false,
+                locked: false
+            };
+            canvasItems.value.push(newItem);
+            activeUuid.value = newItem.uuid;
+            updateZIndex(newItem);
+            uni.showToast({ title: '添加成功(默认比例)', icon: 'none' });
+        }
+    });
 };
-const expandPanel = () => { isPanelExpanded.value = true; };
-const collapsePanel = () => {
-    if (isDragging || isTransforming) return;
-    isPanelExpanded.value = false;
+
+// --- 画布操作 ---
+// 点击面板头部触发
+const onPanelClick = () => {
+    // 切换展开/收起
+    isPanelExpanded.value = !isPanelExpanded.value;
+    if (isPanelExpanded.value) {
+        // 展开时取消画布选中
+        activeUuid.value = '';
+        if (clothesList.value.length === 0) {
+            loadClothes(true);
+        }
+    }
+};
+
+const expandPanel = () => { 
+    isPanelExpanded.value = true; 
     activeUuid.value = '';
 };
-const deleteItem = (index: any) => { canvasItems.value.splice(Number(index), 1); activeUuid.value = ''; };
+
+const collapsePanel = () => {
+    if (isDragging || isTransforming) return;
+    // 点击画布空白处，取消选中
+    activeUuid.value = '';
+    // 同时收起面板
+    isPanelExpanded.value = false;
+};
+
+const deleteItem = (item: CanvasItem) => {
+    const index = canvasItems.value.findIndex((i: CanvasItem) => i.uuid === item.uuid);
+    if (index > -1) {
+        canvasItems.value.splice(index, 1);
+        activeUuid.value = '';
+    }
+};
+
+// 切换图层层级（置顶/置底）
+const toggleLayer = (item: CanvasItem) => {
+    if (!item) return;
+    
+    // 1. 复制一份数组并按当前 zIndex 排序，理清当前的层级关系
+    const sortedItems = [...canvasItems.value].sort((a, b) => a.zIndex - b.zIndex);
+    
+    // 找到当前 item 在排序后数组中的位置
+    const currentIndex = sortedItems.findIndex(i => i.uuid === item.uuid);
+    
+    // 2. 判断是否在最顶层 (即最后一个)
+    const isAtTop = currentIndex === sortedItems.length - 1;
+    
+    if (isAtTop) {
+        // 如果在最顶层，将其移到最底层 (数组开头)
+        // 从当前位置删除
+        sortedItems.splice(currentIndex, 1);
+        // 插入到开头
+        sortedItems.unshift(item);
+        uni.showToast({ title: '已置底', icon: 'none' });
+    } else {
+        // 否则，将其移到最顶层 (数组末尾)
+        // 从当前位置删除
+        sortedItems.splice(currentIndex, 1);
+        // 插入到末尾
+        sortedItems.push(item);
+        uni.showToast({ title: '已置顶', icon: 'none' });
+    }
+
+    // 3. 重新分配正整数 zIndex，保证最小为 10，且不重复，避免产生负数或 0 被背景遮挡
+    sortedItems.forEach((img, idx) => {
+        // 我们直接修改源对象的属性
+        // 起始值设为 10，给背景留足空间
+        img.zIndex = 10 + idx; 
+    });
+};
 
 // --- 触摸拖拽逻辑 (移动) ---
 const onTouchStart = (item: CanvasItem, event: any) => {
@@ -1011,7 +1185,8 @@ const onTouchStart = (item: CanvasItem, event: any) => {
     initialItemX = item.x;
     initialItemY = item.y;
 
-    updateZIndex(item);
+    // 移除自动置顶，避免误操作
+    // updateZIndex(item);
 };
 
 const onTouchMove = (event: any) => {
@@ -1035,50 +1210,71 @@ const onTouchEnd = () => {
 
 // 只有未锁定时才能变换
 const onHandleStart = (item: CanvasItem, event: any) => {
-    if (item.locked) return;
-    if (event.touches.length !== 1) return;
+    if (item.locked || isReadOnly.value) return;
+    
+    event.stopPropagation();
+    event.preventDefault();
 
     isTransforming = true;
     isDragging = false;
     currentItem = item;
 
     const touch = event.touches[0];
-
-    centerX = canvasOffset.value.left + item.x;
-    centerY = canvasOffset.value.top + item.y;
-
-    const vecX = touch.clientX - centerX;
-    const vecY = touch.clientY - centerY;
-
-    initialRotate = Math.atan2(vecY, vecX) * (180 / Math.PI) - item.rotate;
-    const dist = Math.sqrt(vecX * vecX + vecY * vecY);
-
-    initialScale = item.scale / dist;
+    const { clientX, clientY } = touch;
+    
+    // 记录初始状态
+    startX = clientX;
+    startY = clientY;
+    initialRotate = item.rotate;
+    initialScale = item.scale;
+    
+    // 计算中心点屏幕坐标
+    // 注意：item.x/y 是相对于 canvas-container 的坐标
+    // 我们需要计算触摸点相对于 item 中心的角度和距离
+    // 一种简化的方式是记录起始角度和起始距离
 };
 
 const onHandleMove = (event: any) => {
     if (!isTransforming || !currentItem) return;
 
-    event.preventDefault && event.preventDefault();
-    event.stopPropagation && event.stopPropagation();
-
+    event.preventDefault();
+    event.stopPropagation();
+    
     const touch = event.touches[0];
-    const vecX = touch.clientX - centerX;
-    const vecY = touch.clientY - centerY;
+    const { clientX, clientY } = touch;
 
-    // 计算旋转
-    const angle = Math.atan2(vecY, vecX) * (180 / Math.PI);
-    currentItem.rotate = angle - initialRotate;
+    // 获取画布在屏幕上的位置
+    // 由于我们在 onReady 中获取了 rect，但页面滚动可能影响，最好实时计算或使用 fixed 布局
+    // 这里简化处理：假设 item.x/y 加上 canvasOffset 即为屏幕坐标
+    const centerScreenX = currentItem.x + canvasOffset.value.left;
+    const centerScreenY = currentItem.y + canvasOffset.value.top;
 
-    // 计算缩放 (修复公式 typo: vecX * vecX)
-    const dist = Math.sqrt(vecX * vecX + vecY * vecY);
-    let newScale = dist * initialScale;
+    // 1. 计算旋转
+    // 起始向量 (上一次) -> 当前向量
+    // 这里使用更直接的方式：基于中心点计算当前触摸点的角度
+    const diffX = clientX - centerScreenX;
+    const diffY = clientY - centerScreenY;
+    
+    // 当前角度 (弧度)
+    const angle = Math.atan2(diffY, diffX);
+    // 转换为角度
+    let deg = angle * (180 / Math.PI);
+    // 修正：手柄通常在右下角 (45度)，所以需要补偿
+    deg = deg - 45; 
+    
+    currentItem.rotate = deg;
 
+    // 2. 计算缩放
+    // 距离中心点的距离
+    const distance = Math.sqrt(diffX * diffX + diffY * diffY);
+    // 假设初始距离（图片对角线的一半）对应 scale=1
+    // item.width = 200, 对角线约 282, 半径 141
+    // 动态计算： Scale = 当前距离 / (基准半径 * 初始Scale) ? 
+    // 更简单的：Scale = 当前距离 / 100 (假设100px为基准)
+    const newScale = distance / 100;
+    
     // 限制缩放范围
-    if (newScale < 0.2) newScale = 0.2;
-    if (newScale > 5) newScale = 5;
-
-    currentItem.scale = newScale;
+    currentItem.scale = Math.max(0.2, Math.min(newScale, 3));
 };
 
 const onHandleEnd = () => {
@@ -1086,12 +1282,14 @@ const onHandleEnd = () => {
     currentItem = null;
 };
 
+// 刷新 ZIndex，确保当前选中项在最上层（可选，视需求而定）
+// 这里实现简单的 zIndex 维护，不一定要改变数值，主要是为了配合业务逻辑
 const updateZIndex = (item: CanvasItem) => {
-    if (item.locked) return;
-    const maxZ = Math.max(...canvasItems.value.map(i => i.zIndex));
-    if (item.zIndex < maxZ) {
-        item.zIndex = maxZ + 1;
-    }
+    // 简单的置顶逻辑：找到最大的zIndex + 1
+    const maxZ = canvasItems.value.reduce((max: number, i: CanvasItem) => Math.max(max, i.zIndex), 0);
+    // 如果已经是最大，无需操作
+    if (item.zIndex === maxZ && maxZ > 0) return;
+    item.zIndex = maxZ + 1;
 };
 
 const flipItem = (item: CanvasItem) => {
@@ -1100,50 +1298,113 @@ const flipItem = (item: CanvasItem) => {
 
 const lockItem = (item: CanvasItem) => {
     item.locked = true;
-    activeUuid.value = ''; // 锁定后取消选中，防止误触
+    // 锁定后取消选中，避免误操作
+    activeUuid.value = '';
 };
 
 const unlockItem = (item: CanvasItem) => {
     item.locked = false;
-    activeUuid.value = item.uuid; // 解锁后自动选中
+    activeUuid.value = item.uuid;
 };
 
-const toggleSaveTag = (type: 'season' | 'scene', id: number) => {
-    const list = type === 'season' ? form.value.season_ids : form.value.scene_ids;
-    const index = list.indexOf(id);
-    if (index > -1) {
-        list.splice(index, 1); // 移除
-    } else {
-        list.push(id); // 添加
-    }
+const confirmClear = () => {
+    uni.showModal({
+        content: '确定清空画布吗？',
+        success: (res) => {
+            if (res.confirm) {
+                canvasItems.value = [];
+            }
+        }
+    });
 };
 
 const handleAddSceneTag = () => {
     uni.showModal({
-        title: '新增场景标签',
+        title: '新增场景',
         editable: true,
-        placeholderText: '请输入标签名称',
+        placeholderText: '请输入场景名称',
         success: async (res) => {
-            if (res.confirm && res.content) {
+            if (res.confirm && res.content && res.content.trim()) {
                 try {
-                    const addRes = await addTag({ names: res.content, type: 'SCENE' }) as any;
-                    if (addRes.code === 200) {
+                    // 修复参数名 name -> names
+                    const result = await addTag({ names: res.content.trim(), type: 'SCENE' }) as any;
+                    if (result.code === 200) {
                         uni.showToast({ title: '添加成功', icon: 'none' });
                         loadScenes(); // 刷新标签列表
-                    } else {
-                        uni.showToast({ title: addRes.msg || '添加失败', icon: 'none' });
+                        // 自动选中新标签
+                        // if (result.data?.id) toggleSaveTag('scene', result.data.id);
                     }
                 } catch (e) {
-                    console.error(e);
+                    uni.showToast({ title: '添加失败', icon: 'none' });
                 }
             }
         }
     });
 };
 
-const showClothingSelect = () => {
-    expandPanel();
+const toggleSaveTag = (type: 'scene' | 'season', id: number) => {
+    const list = type === 'scene' ? form.value.scene_ids : form.value.season_ids;
+    const index = list.indexOf(id);
+    if (index > -1) {
+        list.splice(index, 1);
+    } else {
+        list.push(id);
+    }
 };
+
+// --- 生命周期 ---
+onLoad((options: any) => {
+    if (options.id) {
+        outfitId.value = options.id;
+        loadOutfitDetail(options.id);
+    }
+    
+    if (options.readonly === 'true') {
+        isReadOnly.value = true;
+    }
+
+    if (options.date) {
+        targetDate.value = options.date;
+    }
+
+    // 预加载基础数据
+    loadCategories();
+    loadScenes();
+    loadSeasons();
+});
+
+onReady(() => {
+    isCanvasReady.value = true;
+    
+    // 获取画布容器的位置信息，用于计算触摸坐标
+    const query = uni.createSelectorQuery().in(instance);
+    query.select('.canvas-container').boundingClientRect((data: any) => {
+        if (data) {
+            canvasRect.value = {
+                width: data.width,
+                height: data.height,
+                left: data.left,
+                top: data.top
+            };
+            canvasOffset.value = { left: data.left, top: data.top };
+            
+            // 同步更新快照画布尺寸
+            snapshotWidth.value = data.width;
+            snapshotHeight.value = data.height;
+
+            // 如果有待渲染的数据（详情页进入），此时渲染
+            if (pendingDetailItems.value.length > 0) {
+                renderPendingItems();
+            }
+        }
+    }).exec();
+    
+    loadClothes(true);
+});
+
+onUnmounted(() => {
+    uni.$off('refreshOutfitList');
+});
 
 </script>
 
@@ -1175,7 +1436,7 @@ const showClothingSelect = () => {
         padding: 8px 8px 8px 0;
     }
 
-    .delete-outfit-btn {
+    .delete-outfit-btn, .favorite-btn {
         padding: 8px;
     }
 }
@@ -1193,6 +1454,7 @@ const showClothingSelect = () => {
     .bg-selector {
         display: flex;
         gap: 12px;
+        flex: 1; // 占据左侧空间
 
         .color-dot {
             width: 20px;
@@ -1214,17 +1476,31 @@ const showClothingSelect = () => {
         }
     }
 
-    .save-btn {
+    .right-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .action-btn {
         padding: 6px 16px;
-        background: #07c160;
-        color: #fff;
         border-radius: 4px;
         font-size: 14px;
         font-weight: 500;
-
+        
         &:active {
             opacity: 0.8;
         }
+    }
+
+    .save-btn {
+        background: #07c160;
+        color: #fff;
+    }
+
+    .clear-btn {
+        background: #f5f5f5;
+        color: #666;
     }
 }
 
@@ -1254,10 +1530,17 @@ const showClothingSelect = () => {
         align-items: center;
         justify-content: center;
         /* transform 由行内样式控制 */
+        
+        /* 默认无边框 */
+        border: 1px dashed transparent;
 
         &.active {
-            border: 1px dashed #07c160;
-
+            border-color: #07c160;
+            /* 移除 z-index: 9999 !important，以便在调整层级时能立刻看到效果。
+               虽然这可能导致选中的物体被遮挡，但对于层级编辑是必要的。
+            */
+            /* z-index: 9999 !important; */ 
+            
             .controls {
                 display: block; // 激活时显示控件
             }
@@ -1266,100 +1549,108 @@ const showClothingSelect = () => {
         .item-img {
             width: 100%;
             height: 100%;
-            pointer-events: none; // 图片本身不响应事件，由父容器响应
+            display: block;
+            /* 保持原有比例 */
+            object-fit: contain; 
+            pointer-events: none; /* 让点击穿透到父容器 */
         }
-    }
-}
-
-.controls {
-    display: none; // 默认隐藏
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    top: 0;
-    left: 0;
-    pointer-events: none; // 让点击穿透到内容，除了按钮
-
-    .ctrl-btn {
-        position: absolute;
-        width: 24px;
-        height: 24px;
-        background: #07c160;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        pointer-events: auto; // 按钮需要响应
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        z-index: 10;
-
-        /* 增加触摸区域 */
-        &::after {
-            content: '';
+        
+        .controls {
+            display: none; /* 默认隐藏 */
             position: absolute;
-            top: -10px;
-            left: -10px;
-            right: -10px;
-            bottom: -10px;
+            left: -12px;
+            top: -12px;
+            right: -12px;
+            bottom: -12px;
+            pointer-events: none; /* 控件容器本身不应阻挡 */
+
+            .ctrl-btn {
+                position: absolute;
+                width: 24px;
+                height: 24px;
+                background: rgba(0, 0, 0, 0.6);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                pointer-events: auto; /* 按钮需要响应点击 */
+                z-index: 10;
+                
+                &:active {
+                    transform: scale(0.9);
+                }
+            }
+
+            .delete-btn {
+                top: 0;
+                left: 0;
+                background: #ff4d4f;
+            }
+
+            .flip-btn {
+                top: 0;
+                right: 0;
+                background: #1890ff;
+            }
+            
+            .transform-handle {
+                bottom: 0;
+                right: 0;
+                background: #07c160;
+                cursor: nwse-resize;
+            }
+
+            .layer-btn {
+                bottom: 0;
+                left: 0;
+                background: #faad14;
+            }
+
+            .lock-btn {
+                top: 50%;
+                left: -12px;
+                transform: translateY(-50%);
+                background: #722ed1;
+            }
+            
+            &.locked-controls {
+                display: block; /* 锁定状态只显示解锁 */
+                border: 1px solid #f44;
+                
+                .unlock-btn {
+                    position: absolute;
+                    top: -10px;
+                    right: -10px;
+                    width: 20px;
+                    height: 20px;
+                    background: #fff;
+                    border: 1px solid #f44;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    pointer-events: auto;
+                }
+            }
         }
     }
-
-    .delete-btn {
-        top: -12px;
-        left: -12px;
-        background: #ee0a24;
-    }
-
-    .flip-btn {
-        top: -12px;
-        right: -12px;
-        background: #1989fa;
-    }
-
-    .lock-btn {
-        bottom: -12px;
-        left: -12px;
-        background: #ff976a;
-    }
-
-    .transform-handle {
-        bottom: -12px;
-        right: -12px;
-        background: #07c160;
-    }
 }
 
-.locked-controls {
-    display: block !important;
-    border: 1px solid transparent; // 占位
-
-    .unlock-btn {
-        position: absolute;
-        top: -12px;
-        right: -12px;
-        width: 24px;
-        height: 24px;
-        background: white;
-        border: 1px solid #f44;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-}
-
+/* 底部面板 */
 .bottom-panel {
     position: fixed;
-    bottom: 0;
     left: 0;
-    width: 100%;
-    height: 60vh;
+    right: 0;
+    bottom: 0;
+    height: 60vh; /* 展开高度 */
     background: #fff;
-    border-radius: 16px 16px 0 0;
-    box-shadow: 0 -4px 16px rgba(0,0,0,0.05);
-    z-index: 90;
-    transition: transform 0.3s ease-out;
-    transform: translateY(calc(100% - 54px - env(safe-area-inset-bottom)));
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    /* 修改：默认露出更多内容 (Tab 44px + Handle 16px + Padding + 约一行衣物) -> 约 220px */
+    transform: translateY(calc(100% - 220px)); 
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); // 缓动效果
+    /* 修复：提高层级，使其高于选中状态的衣物(z-index: 9999) */
+    z-index: 10000;
     display: flex;
     flex-direction: column;
     padding-bottom: env(safe-area-inset-bottom);
@@ -1367,193 +1658,203 @@ const showClothingSelect = () => {
     &.expanded {
         transform: translateY(0);
     }
+
+    &.hidden {
+        transform: translateY(100%); /* 只读模式完全隐藏 */
+    }
+}
+
+.panel-handle {
+    width: 40px;
+    height: 4px;
+    background: #e0e0e0;
+    border-radius: 2px;
+    margin: 8px auto 4px; /* 上下间距 */
+    flex-shrink: 0;
 }
 
 .category-tabs {
-    height: 54px;
     flex-shrink: 0;
+    height: 44px;
     display: flex;
     align-items: center;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid #f5f5f5;
     padding: 0 12px;
 
     .tabs-scroll {
         flex: 1;
         white-space: nowrap;
+        overflow-x: auto;
         margin-right: 8px;
 
         .tab-item {
             display: inline-block;
-            padding: 6px 14px;
-            margin-right: 8px;
-            background: #f5f6f7;
-            border-radius: 16px;
-            font-size: 13px;
+            padding: 6px 16px;
+            font-size: 14px;
             color: #666;
+            margin-right: 8px;
+            border-radius: 16px;
+            background: #f5f5f5;
 
             &.active {
-                background: #e8f5e9;
+                background: #e8f7f0;
                 color: #07c160;
                 font-weight: 500;
             }
         }
     }
-
+    
     .filter-icon {
         padding: 8px;
-        color: #666;
     }
 }
 
 .clothes-scroll {
     flex: 1;
-    height: 0; // 这里的height=0是为了配合flex:1生效
-    padding: 12px;
-    box-sizing: border-box;
-
+    height: 0; /* 必须设置具体的 flex-basis 为 0 或其他，让 flex 自动填充 */
+    background: #fafafa;
+    
     .clothes-list {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 10px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        padding: 12px;
     }
 
     .clothes-card {
         aspect-ratio: 1;
-        background: #f9f9f9;
+        background: #fff;
         border-radius: 8px;
         overflow: hidden;
-
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #f0f0f0;
+        
         .c-img {
             width: 100%;
             height: 100%;
         }
 
         &:active {
-            opacity: 0.7;
+            opacity: 0.8;
+            transform: scale(0.98);
         }
     }
 }
 
-.add-btn {
-    position: fixed;
-    right: 20px;
-    bottom: calc(60vh + 20px); // 位于面板上方，对应展开状态
-    width: 48px;
-    height: 48px;
-    z-index: 150;
-    transition: bottom 0.3s;
-    /* 面板收起时沉底，展开时跟随 */
-
-    &.btn-collapsed {
-        bottom: calc(54px + env(safe-area-inset-bottom) + 20px);
-    }
+.safe-area-spacer {
+    height: 20px;
+    width: 100%;
 }
 
-/* 弹窗样式补全 */
+/* 保存弹窗 */
 .save-popup {
     padding: 24px 16px;
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    background: #fff;
+    border-radius: 20px 20px 0 0;
+    min-height: 50vh;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 
     .popup-title {
         font-size: 18px;
         font-weight: 600;
         text-align: center;
-        margin-bottom: 20px;
+        margin-bottom: 8px;
     }
-
+    
     .tags-section {
-        margin-top: 16px;
-
         .section-title {
             font-size: 14px;
-            color: #666;
-            margin-bottom: 10px;
+            color: #333;
+            margin-bottom: 8px;
+            font-weight: 500;
         }
 
         .tags-wrapper {
             display: flex;
             flex-wrap: wrap;
-            gap: 10px;
-
+            gap: 8px;
+            
             .tag-touch-area {
                 /* 增加点击区域 */
-                padding: 4px;
-                margin: -4px;
+                display: inline-block;
             }
 
             .my-tag {
                 padding: 4px 12px;
+                border-radius: 4px;
             }
-
+            
             .add-tag-btn {
+                width: 28px;
+                height: 28px;
+                border: 1px dashed #ccc;
+                border-radius: 4px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                width: 32px;
-                height: 24px; // 与 tag 高度近似
-                border: 1px dashed #ccc;
-                border-radius: 4px;
-                margin-left: 4px;
             }
         }
-
+        
         .selectors-row {
             display: flex;
             gap: 12px;
-
+            
             .picker-item {
                 flex: 1;
-            }
-
-            .picker-display {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                padding: 10px 12px;
                 background: #f7f8fa;
+                padding: 10px 12px;
                 border-radius: 8px;
-                border: 1px solid #ebedf0;
-
-                .label {
+                
+                .picker-display {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
                     font-size: 14px;
-                    color: #333;
-                }
-
-                .value {
-                    flex: 1;
-                    text-align: right;
-                    margin: 0 8px;
-                    font-size: 14px;
-                    color: #666;
+                    
+                    .value {
+                        flex: 1;
+                        text-align: right;
+                        margin-right: 4px;
+                        color: #333;
+                    }
+                    
+                    .label {
+                        color: #666;
+                    }
                 }
             }
         }
     }
 
     .btn-area {
-        margin-top: 30px;
+        margin-top: 16px;
     }
 }
 
-// 筛选弹窗内部
+/* 筛选弹窗 */
 .filter-container {
     height: 100%;
     display: flex;
     flex-direction: column;
     background: #fff;
+    padding-top: var(--status-bar-height);
 
     .filter-title {
-        height: 44px;
-        line-height: 44px;
-        text-align: center;
+        padding: 16px;
         font-size: 16px;
-        font-weight: 500;
-        border-bottom: 1px solid #eee;
-        padding-top: var(--status-bar-height);
+        font-weight: 600;
+        text-align: center;
+        border-bottom: 1px solid #f5f5f5;
     }
 
     .filter-content {
         flex: 1;
+        overflow-y: auto;
         padding: 16px;
 
         .filter-section {
@@ -1561,8 +1862,9 @@ const showClothingSelect = () => {
 
             .section-header {
                 font-size: 14px;
-                font-weight: 500;
+                font-weight: 600;
                 margin-bottom: 12px;
+                color: #333;
             }
 
             .tags-grid {
@@ -1572,46 +1874,50 @@ const showClothingSelect = () => {
 
                 .filter-tag {
                     padding: 6px 16px;
-                    background: #f5f6f7;
-                    border-radius: 16px;
-                    font-size: 12px;
-                    color: #333;
+                    background: #f5f5f5;
+                    border-radius: 100px;
+                    font-size: 13px;
+                    color: #666;
+                    border: 1px solid transparent;
 
                     &.active {
-                        background: #e8f5e9;
+                        background: rgba(7, 193, 96, 0.1);
                         color: #07c160;
-                        font-weight: 500;
+                        border-color: #07c160;
                     }
                 }
             }
-
+            
             .colors-grid {
                 display: grid;
-                grid-template-columns: repeat(6, 1fr);
+                grid-template-columns: repeat(4, 1fr);
                 gap: 12px;
-
+                
                 .color-item {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    gap: 4px;
-
-                    .color-circle {
-                        width: 24px;
-                        height: 24px;
-                        border-radius: 50%;
-                        border: 1px solid transparent;
-                    }
-
-                    .color-name {
-                        font-size: 10px;
-                        color: #666;
-                    }
-
-                    &.active .color-circle {
-                        transform: scale(1.2);
-                        box-shadow: 0 0 0 2px #07c160;
-                    }
+                     display: flex;
+                     flex-direction: column;
+                     align-items: center;
+                     gap: 6px;
+                     padding: 8px 0;
+                     border-radius: 8px;
+                     border: 1px solid transparent;
+                     
+                     &.active {
+                         background: #f0f9f3;
+                         border-color: #07c160;
+                     }
+                     
+                     .color-circle {
+                         width: 24px;
+                         height: 24px;
+                         border-radius: 50%;
+                         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                     }
+                     
+                     .color-name {
+                         font-size: 12px;
+                         color: #666;
+                     }
                 }
             }
         }
@@ -1619,10 +1925,10 @@ const showClothingSelect = () => {
 
     .filter-actions {
         padding: 16px;
-        padding-bottom: calc(16px + env(safe-area-inset-bottom));
         display: flex;
         gap: 12px;
-        border-top: 1px solid #eee;
+        border-top: 1px solid #f5f5f5;
+        padding-bottom: calc(16px + env(safe-area-inset-bottom));
 
         .action-btn {
             flex: 1;
@@ -1630,31 +1936,35 @@ const showClothingSelect = () => {
     }
 }
 
-.selectors-row {
+/* 只读操作栏 */
+.readonly-actions {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #fff;
+    padding: 12px 24px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
     display: flex;
-    gap: 12px;
-    margin-top: 10px;
+    justify-content: center;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    z-index: 100;
 
-    .picker-item {
-        flex: 1;
-    }
-
-    .picker-display {
+    .primary-btn {
+        width: 100%;
+        height: 44px;
+        background: #07c160;
+        color: #fff;
+        border-radius: 22px;
+        font-size: 16px;
+        font-weight: 600;
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        padding: 10px 12px;
-        background: #f5f6f7;
-        border-radius: 4px;
-        font-size: 14px;
-        color: #333;
-
-        .label {
-            color: #666;
-        }
-
-        .value {
-            color: #333;
+        justify-content: center;
+        border: none;
+        
+        &:active {
+            opacity: 0.9;
         }
     }
 }

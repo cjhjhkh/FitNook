@@ -24,8 +24,10 @@ export const sendMessage = (data: {
     return request({
         url: '/chat/send',
         method: 'POST',
-        data
-    });
+        data: { ...data, stream: true }, // 默认开启流式
+        responseType: 'text', // 设置为 text 防止 UniApp 自动转换 JSON
+        enableChunked: true  // 开启分块传输 (小程序端关键配置)
+    } as any);
 };
 
 /**
