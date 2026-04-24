@@ -19,7 +19,7 @@ export const getPostDetailApi = (id: number | string, current_user_id?: number) 
 };
 
 // 发布动态
-export const publishPostApi = (data: { user_id: number; outfit_id?: number; content: string; image_url?: string }) => {
+export const publishPostApi = (data: { user_id: number; outfit_id?: number; content: string; image_url?: string; image_urls?: string[] }) => {
   return request({
     url: '/social/publish',
     method: 'POST',

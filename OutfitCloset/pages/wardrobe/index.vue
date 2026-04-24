@@ -2,10 +2,10 @@
     <view class="wardrobe-page">
         <view class="sticky-header">
             <view class="top-tool-row">
-                <view class="search-box">
+                <!-- <view class="search-box">
                     <van-search v-model="searchKeyword" placeholder="搜索单品" shape="round" background="transparent"
                         class="custom-search" @search="loadClothesList" />
-                </view>
+                </view> -->
 
                 <scroll-view class="season-scroll" scroll-x enhanced :show-scrollbar="false">
                     <view class="season-wrap">
@@ -329,7 +329,7 @@ const showAddPopup = ref(false);
 const addActions = [
     { name: '拍照录入', icon: 'photograph' },
     { name: '相册导入', icon: 'photo' },
-    { name: 'DIY搭配', icon: 'edit' } // 把歧义的“手动录入”改个名字更贴切
+    // { name: 'DIY搭配', icon: 'edit' } // 把歧义的“手动录入”改个名字更贴切
 ];
 
 // 批量标签弹窗
@@ -888,7 +888,7 @@ const applyFilter = () => {
     }
     
     .season-scroll {
-        width: 300rpx;
+        width: 445rpx;
         margin: 0 20rpx;
         white-space: nowrap;
         

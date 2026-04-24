@@ -12,7 +12,7 @@ export const getMonthDiaries = (params: { account: string, year: number, month: 
 // 获取日记列表（分页）
 export const getDiaryList = (params: { account: string, page: number, pageSize: number }) => {
     return request({
-        url: '/diary/list',
+        url: '/diary/',
         method: 'GET',
         data: params
     });

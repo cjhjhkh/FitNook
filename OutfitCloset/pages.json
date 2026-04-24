@@ -232,32 +232,25 @@
 	},
 	"tabBar": {
 		"color": "#7A7E83",
-		"selectedColor": "#3cc51f",
+		"selectedColor": "#8e72dc",
 		"borderStyle": "black",
 		"backgroundColor": "#ffffff",
+		
 		"list": [
 			{
 				"pagePath": "pages/index/index",
-				"iconPath": "static/tabbar/home.png",
-				"selectedIconPath": "static/tabbar/home-active.png",
 				"text": "首页"
 			},
 			{
 				"pagePath": "pages/wardrobe/index",
-				"iconPath": "static/tabbar/closet.png",
-				"selectedIconPath": "static/tabbar/closet-active.png",
 				"text": "衣橱"
 			},
 			{
 				"pagePath": "pages/outfit/index",
-				"iconPath": "static/tabbar/outfit.png",
-				"selectedIconPath": "static/tabbar/outfit-active.png",
 				"text": "穿搭"
 			},
 			{
 				"pagePath": "pages/my/index",
-				"iconPath": "static/tabbar/user.png",
-				"selectedIconPath": "static/tabbar/user-active.png",
 				"text": "我的"
 			}
 		]

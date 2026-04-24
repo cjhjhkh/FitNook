@@ -33,9 +33,19 @@
 					<view class="card-content">
 						<text v-if="item.content" class="post-text">{{ item.content }}</text>
 						<!-- 穿搭卡片 (点击可查看大图或详情) -->
-						<view class="outfit-preview" v-if="item.image_url">
-							<image :src="item.image_url" mode="widthFix" class="outfit-img"/>
-							<view class="outfit-tag">
+						<view class="outfit-preview" v-if="getImages((item.image_urls || item.image_url)).length > 0">
+                            <view class="image-grid">
+                                <image 
+                                    v-for="(img, idx) in getImages((item.image_urls || item.image_url))" 
+                                    :key="idx" 
+                                    :src="img" 
+                                    mode="aspectFill" 
+                                    class="grid-img"
+                                    @tap.stop="previewImage(getImages((item.image_urls || item.image_url)), idx)"
+                                />
+                            </view>
+
+							<view class="outfit-tag" v-if="item.outfit_name">
 								<van-icon name="bag-o" size="12px" color="#fff" style="margin-right: 4px"/>
 								<text>{{ item.outfit_name }}</text>
 							</view>
@@ -92,6 +102,27 @@ const loading = ref(false);
 const finished = ref(false);
 const isRefreshing = ref(false);
 const currentUser = uni.getStorageSync('userInfo') || {};
+
+// 获取解析后的图片数组
+const getImages = (imageUrl) => {
+    if (!imageUrl || imageUrl === '[]') return [];
+    if (Array.isArray(imageUrl)) return imageUrl.filter(Boolean);
+    try {
+        const parsed = JSON.parse(imageUrl);
+        return Array.isArray(parsed) ? parsed.filter(Boolean) : [imageUrl];
+    } catch {
+        return typeof imageUrl === 'string' ? imageUrl.split(',').filter(Boolean) : [];
+    }
+};
+
+// 预览图片
+const previewImage = (images, current) => {
+    if (!images || images.length === 0) return;
+    uni.previewImage({
+        urls: images,
+        current: current
+    });
+};
 
 onLoad(() => {
     loadFeed();
@@ -285,15 +316,30 @@ const goToDetail = (item: any) => {
         }
         
         .outfit-preview {
-            background: #f8f9fa;
             border-radius: 16rpx;
             overflow: hidden;
             position: relative;
+            margin-top: 10rpx;
             
-            .outfit-img {
+            .outfit-img-single {
                 width: 100%;
                 display: block;
-                // height is auto
+                border-radius: 16rpx;
+                background: #f8f9fa;
+            }
+            
+            .image-grid {
+                display: flex;
+                flex-wrap: wrap;
+                margin: -4rpx;
+                
+                .grid-img {
+                    width: calc(33.33% - 8rpx);
+                    height: 220rpx;
+                    margin: 4rpx;
+                    border-radius: 12rpx;
+                    background: #f8f9fa;
+                }
             }
             
             .outfit-tag {

@@ -1,0 +1,8 @@
+<cover-view class="tab-bar">
+  <cover-view class="tab-bar-border"></cover-view>
+  <cover-view wx:for="{{list}}" wx:key="index" class="tab-bar-item" data-path="{{item.pagePath}}" data-index="{{index}}" bindtap="switchTab">
+    <cover-view style="color: {{selected === index ? selectedColor : color}}; font-weight: 600; display: flex; align-items: center; justify-content: center; height: 100%;">
+      {{item.text}}
+    </cover-view>
+  </cover-view>
+</cover-view>

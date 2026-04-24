@@ -920,7 +920,7 @@ const applyInspiration = () => {
                 // 2. 清空ID，视为新建
                 outfitId.value = '';
                 // 3. 重置标题
-                uni.setNavigationBarTitle({ title: 'DIY搭配' });
+                // uni.setNavigationBarTitle({ title: 'DIY搭配' });
                 // 4. 提示
                 uni.showToast({ title: '已应用，请开始创作', icon: 'none' });
             }
